@@ -74,8 +74,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# edit .env and paste your real QWEN_API_KEY (and optionally the per-role
-# keys / QWEN_MAX_CONCURRENCY — see the comments in .env.example)
+# edit .env and paste your real QWEN_API_KEY (and optionally the per-role keys / QWEN_MAX_CONCURRENCY)
 
 python main.py
 ```
