@@ -24,11 +24,6 @@ through that endpoint.
 
 ![Alibaba Cloud ECS Workbench](frontend/alibaba-cloud-screenshot.png)
 
-*(Take a screenshot of your ECS instance in the Alibaba Cloud console — Workbench
-or the ECS instance list — showing it in the "Running" state with its public IP
-visible. Save it as `docs/alibaba-cloud-screenshot.png` in this repo and it will
-render right here.)*
-
 **3. Live deployment:** the backend runs on an Alibaba Cloud ECS instance —
 see [Deployment](#3-deploy-to-alibaba-cloud-ecs) below for the exact setup.
 
