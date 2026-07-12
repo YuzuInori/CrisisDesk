@@ -743,14 +743,14 @@ function onEvent(d) {
       drawMap();
     }
     addFeedLine({...d, agent:'system'});
-    scheduleTimelineRefresh();
+    if (d.run_id === currentRunId) scheduleTimelineRefresh();
   } else if (d.type === 'incident_escalated') {
     if (iid) {
       if (!incState[iid]) incState[iid] = {x:d.x||50, y:d.y||50, priority_tier:'CRITICAL', status:'pending'};
       incState[iid].status = 'escalated';
       drawMap();
     }
-    scheduleTimelineRefresh();
+    if (d.run_id === currentRunId) scheduleTimelineRefresh();
   } else if (d.type === 'benchmark_complete') {
     addFeedLine({...d, agent:'system'});
   } else if (d.type === 'incidents_declared') {
@@ -762,7 +762,7 @@ function onEvent(d) {
     if (d.run_id) { currentRunId = d.run_id; refreshSessPill(); loadRunsList(d.run_id); }
   } else if (d.type === 'batch_complete' || d.type === 'batch_stopped' || d.type === 'batch_error' || d.type === 'session_stopped') {
     addFeedLine({...d, agent:'system'});
-    if (currentRunId) { loadTimeline(currentRunId); syncMapFromAPI(currentRunId); loadRunsList(currentRunId); }
+    if (d.run_id && d.run_id === currentRunId) { loadTimeline(currentRunId); syncMapFromAPI(currentRunId); loadRunsList(currentRunId); }
     refreshSessPill();
   }
 }
@@ -1042,6 +1042,7 @@ async function runScenario(mode) {
   try {
     const r=await fetch(`${API}/api/run`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario_name:'random',mode,resource_counts:resSettings})});
     const result=await r.json();
+    if (result.status === 'cancelled') { setStatus('IDLE'); addFeedLine({agent:'system', message:'⏹ Stopped by user.'}); setBtnsDisabled(false); return; }
     currentRunId=result.run_id;
     if (mode==='multi_agent') lastMultiRunId=result.run_id; else lastSingleRunId=result.run_id;
     document.getElementById('btn-report').disabled=false;
@@ -1063,6 +1064,7 @@ async function runCompare() {
   try {
     const r=await fetch(`${API}/api/compare`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario_name:'random',resource_counts:resSettings})});
     const result=await r.json();
+    if (result.status === 'cancelled') { setStatus('IDLE'); addFeedLine({agent:'system', message:'⏹ Stopped by user.'}); setBtnsDisabled(false); return; }
     setStatus('COMPLETE'); setStats(result.multi_agent);
     renderScoreboard(result);
     currentRunId=result.multi_agent.run_id;
@@ -1422,10 +1424,17 @@ async function loadTimeline(runId) {
   }
   if (reportBtn) reportBtn.disabled = false;
   try {
-    const [dr,mr]=await Promise.all([
-      fetch(`${API}/api/runs/${runId}`),
-      fetch(`${API}/api/runs/${runId}/transcript`)
-    ]);
+    const dr = await fetch(`${API}/api/runs/${runId}`);
+    if (dr.status === 404) {
+      // This run no longer exists (e.g. it was cleared/reset) — stop tracking
+      // it instead of silently re-fetching it forever, and refresh the
+      // dropdown so it disappears from the list.
+      timelineRunId = null;
+      if (currentRunId === runId) currentRunId = null;
+      await loadRunsList();
+      return;
+    }
+    const mr = await fetch(`${API}/api/runs/${runId}/transcript`);
     const detail=await dr.json();
     const messages=await mr.json();
     renderTimeline(detail.incidents||[],messages||[]);
