@@ -95,8 +95,8 @@ sudo apt install -y python3-venv python3-pip git nginx
 ### 3.2 Get the code onto the server
 
 ```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/YuzuInori/CrisisDesk.git
+cd CrisisDesk
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env
@@ -142,24 +142,8 @@ hitting uvicorn directly, open 8000 instead.
 ### 3.6 Updating after a new push
 
 ```bash
-cd <your-repo>
+cd CrisisDesk
 git pull
 .venv/bin/pip install -r requirements.txt   # only if deps changed
 sudo systemctl restart crisisdesk
 ```
-
-## Submission checklist
-
-- [x] Public, open-source code repo (MIT `LICENSE`, visible in the About sidebar)
-- [x] Code file with the Qwen Cloud base URL clearly visible (`backend/orchestrator/orchestrator.py`)
-- [ ] Screenshot showing proof of deployment on Alibaba Cloud (`docs/alibaba-cloud-screenshot.png`)
-- [ ] 3-minute demo video of the real running app (not a mockup)
-- [x] Track identified: Track 3 — Agent Society
-
-## Notes
-
-- The SQLite database lives at `data/crisisdesk.db` — back it up before big
-  changes if you care about run history; it's gitignored so it won't be
-  overwritten by a `git pull`.
-- `DEV_MODE=1` in `.env` enables uvicorn's autoreload for local development —
-  leave it unset in production.
