@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CrisisDesk — Multi-Agent Dispatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════
+   THEME TOKENS — dark (default) + light override
+══════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  --bg:          #0b0e1a;
+  --bg2:         #111425;
+  --surface:     rgba(255,255,255,0.04);
+  --surface-b:   rgba(255,255,255,0.07);
+  --border:      rgba(255,255,255,0.1);
+  --text:        #e8edf8;
+  --text-dim:    #8892a4;
+  --text-faint:  #4a5568;
+
+  --glow-blue:   rgba(99,179,237,0.18);
+  --glow-red:    rgba(252,129,129,0.18);
+  --glow-green:  rgba(104,211,145,0.18);
+  --glow-purple: rgba(183,148,246,0.18);
+  --glow-amber:  rgba(252,196,25,0.18);
+
+  --critical:    #fc8181;
+  --urgent:      #f6ad55;
+  --low-c:       #fbd38d;
+  --resolved-c:  #68d391;
+  --info:        #63b3ed;
+  --purple:      #b794f4;
+  --cyan:        #76e4f7;
+
+  --triage-c:    #63b3ed;
+  --alloc-c:     #f6ad55;
+  --audit-c:     #b794f4;
+  --liaison-c:   #76e4f7;
+  --system-c:    #8892a4;
+
+  --header-bg:   linear-gradient(135deg,#0f1629 0%,#1a1f35 100%);
+  --tab-active-bg: linear-gradient(135deg,rgba(99,179,237,0.15),rgba(183,148,246,0.1));
+  --btn-glass:   rgba(255,255,255,0.07);
+  --scrollbar:   rgba(255,255,255,0.12);
+}
+
+[data-theme="light"] {
+  --bg:          #f0f4ff;
+  --bg2:         #e8eeff;
+  --surface:     rgba(255,255,255,0.85);
+  --surface-b:   rgba(255,255,255,0.95);
+  --border:      rgba(37,99,235,0.14);
+  --text:        #1a1a2e;
+  --text-dim:    #4a5568;
+  --text-faint:  #94a3b8;
+
+  --glow-blue:   rgba(37,99,235,0.1);
+  --glow-red:    rgba(185,28,28,0.1);
+  --glow-green:  rgba(22,163,74,0.1);
+  --glow-purple: rgba(124,58,237,0.1);
+  --glow-amber:  rgba(217,119,6,0.1);
+
+  --critical:    #b91c1c;
+  --urgent:      #c2610c;
+  --low-c:       #b45309;
+  --resolved-c:  #16a34a;
+  --info:        #2563eb;
+  --purple:      #7c3aed;
+  --cyan:        #0891b2;
+
+  --triage-c:    #2563eb;
+  --alloc-c:     #d97706;
+  --audit-c:     #7c3aed;
+  --liaison-c:   #0891b2;
+  --system-c:    #64748b;
+
+  --header-bg:   linear-gradient(135deg,#fff 0%,#f0f6ff 60%,#e8f0ff 100%);
+  --tab-active-bg: linear-gradient(135deg,rgba(37,99,235,0.12),rgba(124,58,237,0.06));
+  --btn-glass:   rgba(37,99,235,0.07);
+  --scrollbar:   rgba(37,99,235,0.18);
+}
+
+/* ══════════════════════════════════════════════════════
+   RESET + BASE
+══════════════════════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui,'Inter',sans-serif);font-size:14px;transition:background .3s,color .3s;}
+
+[data-theme="dark"] body{
+  background-image:
+    radial-gradient(ellipse at 20% 50%,rgba(99,179,237,0.04) 0%,transparent 60%),
+    radial-gradient(ellipse at 80% 20%,rgba(183,148,246,0.04) 0%,transparent 60%);
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+@keyframes slideLeft{from{opacity:0;transform:translateX(-10px);}to{opacity:1;transform:translateX(0);}}
+@keyframes dotPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.8);opacity:.4;}}
+@keyframes glow{0%,100%{box-shadow:0 0 8px currentColor;}50%{box-shadow:0 0 18px currentColor,0 0 32px currentColor;}}
+@keyframes valuePop{0%{transform:scale(1.18);}100%{transform:scale(1);}}
+@keyframes conflictFlash{0%{box-shadow:0 0 0 0 rgba(252,129,129,.6);}100%{box-shadow:0 0 0 12px rgba(252,129,129,0);}}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ══════════════════════════════════════════════════════
+   APP SHELL — fixed full-height layout
+══════════════════════════════════════════════════════ */
+.app{display:grid;grid-template-rows:64px 1fr;height:100vh;overflow:hidden;}
+
+/* ─── HEADER ── */
+.header{
+  background:var(--header-bg);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;
+  backdrop-filter:blur(20px);
+  z-index:100;
+}
+[data-theme="dark"] .header{box-shadow:0 1px 0 rgba(255,255,255,.06),0 4px 24px rgba(0,0,0,.4);}
+[data-theme="light"] .header{box-shadow:0 2px 16px rgba(37,99,235,.1);}
+
+.brand{display:flex;align-items:center;gap:12px;}
+/*.brand-mark{
+  width:38px;height:38px;border-radius:10px;overflow:hidden;
+  background:linear-gradient(135deg,#b91c1c,#d97706);
+  display:grid;place-items:center;font-size:18px;flex-shrink:0;
+  box-shadow:0 0 16px rgba(185,28,28,.45);
+}*/
+[data-theme="light"] .brand-mark{box-shadow:0 3px 12px rgba(185,28,28,.3);}
+.brand-mark img{width:100%;height:100%;object-fit:cover;}
+.brand-text h1{font-size:16px;font-weight:900;letter-spacing:-.01em;}
+[data-theme="dark"] .brand-text h1{color:#e2e8f0;}
+[data-theme="light"] .brand-text h1{color:#1e3a5f;}
+.brand-text h1 span{color:var(--info);}
+.brand-text p{font-size:10px;color:var(--text-faint);font-weight:600;margin-top:1px;}
+
+.header-right{display:flex;align-items:center;gap:12px;}
+
+.live-badge{
+  display:flex;align-items:center;gap:7px;
+  padding:6px 14px;border-radius:20px;
+  border:1px solid var(--resolved-c);
+  background:var(--glow-green);
+  color:var(--resolved-c);
+  font-size:11px;font-weight:800;font-family:'IBM Plex Mono',monospace;
+  letter-spacing:.04em;
+}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--resolved-c);animation:dotPulse 1.3s infinite;}
+
+.theme-btn{
+  width:36px;height:36px;border-radius:9px;border:1px solid var(--border);
+  background:var(--btn-glass);color:var(--text);cursor:pointer;
+  font-size:17px;display:grid;place-items:center;transition:all .2s;
+}
+.theme-btn:hover{border-color:var(--info);box-shadow:0 0 12px var(--glow-blue);}
+
+/* ══════════════════════════════════════════════════════
+   BODY LAYOUT — 3-column no-scroll
+══════════════════════════════════════════════════════ */
+.body{display:grid;grid-template-columns:270px 1fr 320px;height:100%;overflow:hidden;gap:0;}
+
+/* ─── LEFT SIDEBAR ── */
+.sidebar{
+  padding:16px;overflow-y:auto;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;gap:14px;
+  background:var(--bg2);
+}
+[data-theme="dark"] .sidebar{background:rgba(255,255,255,.02);}
+
+.s-section{display:flex;flex-direction:column;gap:8px;}
+.s-title{
+  font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-faint);padding-bottom:6px;border-bottom:1px solid var(--border);
+}
+
+/* Scenario buttons */
+.scene-btn{
+  width:100%;padding:10px 14px;border-radius:9px;border:1px solid var(--border);
+  background:var(--btn-glass);color:var(--text);cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;
+  text-align:left;transition:all .2s;display:flex;align-items:center;gap:8px;
+}
+.scene-btn:hover:not(:disabled){border-color:var(--info);color:var(--info);box-shadow:0 0 14px var(--glow-blue);transform:translateX(2px);}
+.scene-btn:active:not(:disabled){transform:scale(.97);}
+.scene-btn:disabled{opacity:.4;cursor:default;}
+.scene-btn.primary{background:linear-gradient(135deg,rgba(99,179,237,.15),rgba(99,179,237,.05));border-color:rgba(99,179,237,.35);color:var(--info);}
+[data-theme="light"] .scene-btn.primary{background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));border-color:rgba(37,99,235,.3);}
+.scene-btn.compare-btn{background:linear-gradient(135deg,rgba(252,129,129,.12),rgba(246,173,85,.08));border-color:rgba(252,129,129,.35);color:var(--critical);}
+[data-theme="light"] .scene-btn.compare-btn{background:linear-gradient(135deg,rgba(185,28,28,.08),rgba(194,97,12,.05));border-color:rgba(185,28,28,.25);color:var(--critical);}
+
+/* Declare stepper */
+.dec-row{display:flex;align-items:center;gap:8px;}
+.dec-stepper{
+  display:flex;align-items:center;border:1.5px solid var(--info);
+  border-radius:8px;overflow:hidden;flex-shrink:0;
+}
+.dec-stepper button{
+  width:32px;height:32px;border:none;background:transparent;
+  color:var(--info);font-size:18px;font-weight:800;cursor:pointer;transition:background .15s;
+}
+.dec-stepper button:hover{background:var(--glow-blue);}
+.dec-count{
+  font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:900;
+  width:36px;text-align:center;color:var(--text);background:transparent;
+}
+.dec-btn{
+  flex:1;padding:9px 10px;border-radius:8px;border:1px solid var(--info);
+  background:var(--glow-blue);color:var(--info);
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+}
+.dec-btn:hover:not(:disabled){box-shadow:0 0 16px var(--glow-blue);filter:brightness(1.1);}
+.dec-btn:disabled{opacity:.4;cursor:default;}
+.reset-btn{
+  width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);
+  background:transparent;color:var(--text-dim);
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+}
+.reset-btn:hover{border-color:var(--critical);color:var(--critical);background:var(--glow-red);}
+
+/* Session status pill */
+.sess-pill{
+  font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;
+  padding:5px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text-faint);text-align:center;
+}
+.sess-pill.active{border-color:var(--resolved-c);color:var(--resolved-c);background:var(--glow-green);}
+.live-status-badge{
+  display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;
+  margin:6px 0 8px;padding:5px 9px;border-radius:6px;
+  background:rgba(255,255,255,.03);color:var(--muted,#8b96ad);
+  border:1px solid #232d45;
+}
+.live-status-badge.busy{color:var(--urgent,#f59e0b);border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08);}
+
+/* Stat boxes in sidebar */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat-box{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;position:relative;overflow:hidden;
+}
+.stat-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--info),var(--purple));}
+.stat-box.s-crit::before{background:linear-gradient(90deg,var(--critical),var(--urgent));}
+.stat-box .sl{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;font-weight:700;}
+.stat-box .sv{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:900;}
+.sv.ok{color:var(--resolved-c);}
+.sv.crit{color:var(--critical);}
+.sv.info{color:var(--info);}
+.sv.popped{animation:valuePop .25s ease;}
+
+/* Resource settings in sidebar */
+.res-row{display:flex;align-items:center;justify-content:space-between;}
+.res-label-s{font-size:12px;font-weight:600;color:var(--text-dim);}
+.mini-stepper{display:flex;align-items:center;gap:6px;}
+.mini-stepper button{
+  width:24px;height:24px;border-radius:5px;border:1px solid var(--border);
+  background:var(--btn-glass);color:var(--text);font-size:14px;font-weight:800;
+  cursor:pointer;transition:all .15s;
+}
+.mini-stepper button:hover{border-color:var(--info);background:var(--glow-blue);color:var(--info);}
+.mini-cnt{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:800;width:20px;text-align:center;}
+
+.save-btn{
+  width:100%;padding:9px;border-radius:8px;
+  background:linear-gradient(135deg,rgba(99,179,237,.18),rgba(183,148,246,.12));
+  border:1px solid rgba(99,179,237,.35);
+  color:var(--info);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+}
+[data-theme="light"] .save-btn{background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(124,58,237,.06));border-color:rgba(37,99,235,.3);}
+.save-btn:hover{box-shadow:0 0 14px var(--glow-blue);filter:brightness(1.08);}
+
+.s-divider{height:1px;background:var(--border);}
+
+/* Flow badges */
+.flow-badges{display:flex;flex-direction:column;gap:6px;}
+.flow-badge{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;
+  border-radius:8px;border:1px solid var(--border);background:var(--surface);
+  font-size:11px;font-weight:700;transition:all .2s;
+}
+.flow-badge:hover{transform:translateX(3px);}
+.fb-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.fb-name{color:var(--text);flex:1;}
+.fb-desc{font-size:9.5px;color:var(--text-faint);font-family:'IBM Plex Mono',monospace;}
+
+/* ─── CENTER PANEL ── */
+.center{display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+
+/* Tabs */
+.tabbar{
+  display:flex;gap:2px;padding:10px 16px 0;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.tab-btn{
+  padding:9px 18px;border-radius:9px 9px 0 0;border:1px solid transparent;
+  background:transparent;color:var(--text-faint);cursor:pointer;
+  font-size:13px;font-weight:700;transition:all .2s;border-bottom:none;
+}
+.tab-btn:hover{color:var(--text);background:var(--surface);}
+.tab-btn.active{
+  background:var(--tab-active-bg);border-color:var(--border);
+  border-bottom-color:var(--bg);color:var(--info);
+  box-shadow:0 0 18px var(--glow-blue);
+}
+
+/* Tab panels */
+.tab-panel{display:none;flex:1;overflow-y:auto;padding:18px;}
+.tab-panel.active{display:block;animation:fadeUp .3s ease;}
+.timeline-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;}
+.timeline-toolbar select{
+  flex:1;background:#0d1420;color:#e5e9f0;border:1px solid #2a3550;
+  border-radius:8px;padding:8px 10px;font-size:12.5px;
+}
+[data-theme="light"] .timeline-toolbar select{background:#fff;color:#1a1f2e;}
+.run-badge{
+  font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;
+  background:rgba(255,255,255,.06);color:var(--muted,#8b96ad);
+  border:1px solid #2a3550;margin-right:6px;
+}
+
+/* Map */
+#map-canvas{
+  width:100%;aspect-ratio:1;max-height:calc(100vh - 180px);
+  border-radius:14px;border:1px solid var(--border);display:block;
+}
+[data-theme="dark"] #map-canvas{box-shadow:0 0 30px rgba(99,179,237,.08);}
+[data-theme="light"] #map-canvas{box-shadow:0 3px 16px rgba(37,99,235,.08);}
+
+.map-legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);font-weight:600;}
+.leg-dot{width:9px;height:9px;border-radius:50%;}
+.leg-ring{width:9px;height:9px;border-radius:50%;border:2px solid var(--resolved-c);background:transparent;}
+
+/* Explainer in tab */
+.explainer{
+  border:1px solid var(--border);border-radius:12px;padding:16px 18px;
+  margin-bottom:14px;font-size:13px;line-height:1.7;background:var(--surface);
+}
+[data-theme="dark"] .explainer{backdrop-filter:blur(10px);}
+.explainer h3{font-size:14px;font-weight:800;margin-bottom:8px;color:var(--info);}
+
+/* Benchmark scoreboard */
+.bench-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.bench-col{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:18px;position:relative;overflow:hidden;
+}
+[data-theme="dark"] .bench-col{backdrop-filter:blur(10px);}
+.bench-col::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--border);}
+.bench-col.winner::before{background:linear-gradient(90deg,var(--resolved-c),#4ade80);}
+.bench-col.winner{box-shadow:0 0 24px var(--glow-green);}
+.bench-col h4{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;font-family:'IBM Plex Mono',monospace;font-weight:800;}
+.bench-metric{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;border-bottom:1px solid var(--border);font-weight:600;}
+.bench-metric:last-child{border-bottom:none;}
+.bench-metric .mv{font-family:'IBM Plex Mono',monospace;font-weight:800;}
+
+.quality-scores{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;
+}
+.q-score-box{
+  padding:16px;border-radius:12px;border:1px solid var(--border);
+  background:var(--surface);text-align:center;
+}
+.q-score-box .ql{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);margin-bottom:6px;}
+.q-score-box .qv{font-family:'IBM Plex Mono',monospace;font-size:32px;font-weight:900;}
+.q-score-box.winner .qv{color:var(--resolved-c);text-shadow:0 0 20px var(--glow-green);}
+
+.response-note{
+  padding:12px 16px;border-radius:10px;border:1px solid;
+  font-size:12px;line-height:1.65;margin-top:12px;
+}
+[data-theme="dark"] .response-note{border-color:rgba(246,173,85,.3);background:rgba(246,173,85,.08);color:var(--urgent);}
+[data-theme="light"] .response-note{border-color:rgba(194,97,12,.25);background:rgba(194,97,12,.06);color:var(--urgent);}
+
+.impr-banner{
+  padding:14px 18px;border-radius:12px;
+  border:1px solid rgba(104,211,145,.35);
+  background:var(--glow-green);
+  font-size:13px;line-height:1.7;margin-bottom:14px;
+}
+[data-theme="light"] .impr-banner{border-color:rgba(22,163,74,.3);}
+.impr-banner b{color:var(--resolved-c);font-family:'IBM Plex Mono',monospace;}
+
+/* Timeline */
+.inc-card{
+  border:1px solid var(--border);border-radius:12px;margin-bottom:10px;
+  overflow:hidden;animation:fadeUp .3s ease;background:var(--surface);
+  transition:box-shadow .2s;
+}
+[data-theme="dark"] .inc-card:hover{box-shadow:0 0 20px var(--glow-blue);}
+[data-theme="light"] .inc-card:hover{box-shadow:0 4px 18px rgba(37,99,235,.1);}
+.inc-head{
+  padding:13px 16px;display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;transition:background .15s;
+}
+.inc-head:hover{background:var(--surface-b);}
+.inc-title{display:flex;align-items:center;gap:10px;}
+.inc-num{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-faint);font-weight:700;}
+.inc-name{font-size:14px;font-weight:800;text-transform:capitalize;}
+.inc-coords{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-faint);}
+.inc-badges{display:flex;align-items:center;gap:8px;}
+.tier-pill{font-size:10px;font-weight:800;letter-spacing:.03em;padding:3px 9px;border-radius:5px;}
+.tier-pill.CRITICAL{background:var(--glow-red);color:var(--critical);border:1px solid rgba(252,129,129,.3);}
+.tier-pill.URGENT{background:var(--glow-amber);color:var(--urgent);border:1px solid rgba(246,173,85,.3);}
+.tier-pill.LOW{background:rgba(251,211,141,.12);color:var(--low-c);border:1px solid rgba(251,211,141,.3);}
+.status-pill{font-size:10px;font-family:'IBM Plex Mono',monospace;font-weight:700;padding:3px 9px;border-radius:5px;background:var(--surface-b);color:var(--text-faint);border:1px solid var(--border);}
+.status-pill.resolved{color:var(--resolved-c);background:var(--glow-green);border-color:rgba(104,211,145,.3);}
+.status-pill.escalated_no_resource{color:var(--critical);background:var(--glow-red);border-color:rgba(252,129,129,.3);}
+.chevron{transition:transform .2s;color:var(--text-faint);}
+.inc-card.open .chevron{transform:rotate(180deg);}
+.inc-body{display:none;padding:4px 16px 16px;border-top:1px solid var(--border);}
+.inc-card.open .inc-body{display:block;animation:fadeUp .25s ease;}
+
+.step-row{display:flex;gap:13px;padding:13px 0;border-bottom:1px dashed var(--border);}
+.step-row:last-child{border-bottom:none;}
+.step-icon{flex:0 0 36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:16px;color:#fff;}
+.step-icon.triage{background:linear-gradient(135deg,#2563eb,#4f8ff0);box-shadow:0 0 12px rgba(37,99,235,.4);}
+.step-icon.allocator{background:linear-gradient(135deg,#d97706,#f2a93a);box-shadow:0 0 12px rgba(217,119,6,.4);}
+.step-icon.auditor{background:linear-gradient(135deg,#7c3aed,#a673eb);box-shadow:0 0 12px rgba(124,58,237,.4);}
+.step-icon.liaison{background:linear-gradient(135deg,#0891b2,#38c4dd);box-shadow:0 0 12px rgba(8,145,178,.4);}
+.step-icon.rejected{background:linear-gradient(135deg,#b91c1c,#e25a4f);box-shadow:0 0 12px rgba(185,28,28,.4);}
+.step-content{flex:1;}
+.step-label{font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px;}
+.step-text{font-size:13px;line-height:1.6;color:var(--text);}
+.reject-banner{
+  margin-top:7px;padding:9px 12px;border-radius:8px;
+  background:var(--glow-red);border:1px solid rgba(252,129,129,.3);
+  font-size:12px;color:var(--critical);font-weight:600;
+}
+
+.empty-state{text-align:center;padding:48px 20px;color:var(--text-faint);font-size:13px;line-height:1.7;font-weight:600;}
+.empty-state .icn{font-size:32px;margin-bottom:10px;display:block;}
+
+/* ─── RIGHT PANEL — live feed ── */
+.right-panel{
+  display:flex;flex-direction:column;overflow:hidden;
+  border-left:1px solid var(--border);background:var(--bg2);
+}
+[data-theme="dark"] .right-panel{background:rgba(255,255,255,.015);}
+
+.rp-header{
+  padding:13px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.rp-title{font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);}
+.feed-status-badge{
+  font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;
+  padding:4px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text-faint);
+}
+.feed-status-badge.running{border-color:var(--info);color:var(--info);background:var(--glow-blue);animation:glow 2s infinite;}
+.feed-status-badge.complete{border-color:var(--resolved-c);color:var(--resolved-c);background:var(--glow-green);}
+.feed-status-badge.error{border-color:var(--critical);color:var(--critical);background:var(--glow-red);}
+
+.feed-scroll{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:7px;}
+.feed-line{
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.6;
+  padding:9px 11px;border-radius:8px;border:1px solid transparent;
+  animation:slideLeft .22s ease;
+}
+.feed-line.triage{background:rgba(99,179,237,.08);border-color:rgba(99,179,237,.2);}
+.feed-line.allocator{background:rgba(246,173,85,.08);border-color:rgba(246,173,85,.2);}
+.feed-line.auditor{background:rgba(183,148,246,.08);border-color:rgba(183,148,246,.2);}
+.feed-line.liaison{background:rgba(118,228,247,.08);border-color:rgba(118,228,247,.2);}
+.feed-line.single_agent,.feed-line.system{background:var(--surface);border-color:var(--border);}
+.feed-tag{font-weight:800;text-transform:uppercase;font-size:9px;margin-right:6px;padding:2px 7px;border-radius:4px;color:#fff;display:inline-block;}
+.feed-line.triage .feed-tag{background:var(--triage-c);}
+.feed-line.allocator .feed-tag{background:var(--alloc-c);}
+.feed-line.auditor .feed-tag{background:var(--audit-c);}
+.feed-line.liaison .feed-tag{background:var(--liaison-c);}
+.feed-line.system .feed-tag,.feed-line.single_agent .feed-tag{background:var(--system-c);}
+
+.conflict-line{
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.6;
+  padding:10px 12px;border-radius:8px;
+  background:linear-gradient(135deg,rgba(252,129,129,.12),rgba(246,173,85,.06));
+  border:1.5px solid rgba(252,129,129,.4);color:var(--text);
+  animation:slideLeft .22s ease, conflictFlash 1s ease;
+}
+.conflict-tag{font-weight:800;color:var(--critical);font-size:9.5px;text-transform:uppercase;display:block;margin-bottom:3px;}
+
+/* Light theme feed overrides */
+[data-theme="light"] .feed-line.triage{background:rgba(37,99,235,.07);border-color:rgba(37,99,235,.18);}
+[data-theme="light"] .feed-line.allocator{background:rgba(217,119,6,.07);border-color:rgba(217,119,6,.18);}
+[data-theme="light"] .feed-line.auditor{background:rgba(124,58,237,.07);border-color:rgba(124,58,237,.18);}
+[data-theme="light"] .feed-line.liaison{background:rgba(8,145,178,.07);border-color:rgba(8,145,178,.18);}
+[data-theme="light"] .conflict-line{background:linear-gradient(135deg,rgba(185,28,28,.08),rgba(194,97,12,.05));border-color:rgba(185,28,28,.4);}
+
+/* Scrollbars */
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:3px;}
+
+/* Declare modal */
+.declare-modal-overlay{
+  position:fixed;inset:0;background:rgba(4,7,14,.65);
+  display:flex;align-items:center;justify-content:center;z-index:999;
+}
+.declare-modal{
+  background:var(--panel,#0f1626);border:1px solid #2a3550;border-radius:12px;
+  width:340px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+}
+.declare-modal-head{padding:14px 16px;border-bottom:1px solid #232d45;font-weight:700;font-size:13px;color:var(--text,#e5e9f0);}
+.declare-modal-body{padding:12px 16px;overflow-y:auto;flex:1;}
+.declare-row-item{margin-bottom:10px;}
+.declare-row-item label{display:block;font-size:11px;color:var(--muted,#8b96ad);margin-bottom:4px;font-weight:600;}
+.declare-row-item select{
+  width:100%;background:#0d1420;color:#e5e9f0;border:1px solid #2a3550;
+  border-radius:6px;padding:7px 8px;font-size:12px;
+}
+.declare-modal-foot{padding:12px 16px;border-top:1px solid #232d45;display:flex;gap:8px;}
+.declare-modal-foot button{flex:1;padding:9px;border-radius:8px;border:none;font-weight:700;cursor:pointer;font-size:12.5px;}
+.declare-confirm-btn{background:var(--accent,#3b82f6);color:#fff;}
+.declare-cancel-btn{background:#1b2438;color:#c7d0e0;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-mark" id="brand-mark" style="display:flex;justify-content:center;align-items:center;width:55px;height:55px;border-radius:10px;background:white;">
+      <img src="/static/logo1.png" alt="CrisisDesk logo" 
+           style="height:53px;width:53px;object-fit:contain;" 
+           onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'🚨', style:'font-size:40px;'}))">
+    </div>
+    <div class="brand-text">
+      <h1>Crisis<span>Desk</span></h1>
+      <p>Agent Society · Track 3 · Multi-Agent Dispatch Simulation</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>SIM MODE</div>
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+  </div>
+</header>
+
+<!-- ═══════════════════ BODY ═══════════════════ -->
+<div class="body">
+
+<!-- ─── LEFT SIDEBAR ── -->
+<aside class="sidebar">
+
+  <!-- STATS -->
+  <div class="s-section">
+    <div class="s-title">Current Run</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="sl">Incidents</div><div class="sv info" id="st-inc">—</div></div>
+      <div class="stat-box"><div class="sl">Resolved</div><div class="sv ok" id="st-res">—</div></div>
+      <div class="stat-box s-crit"><div class="sl">Violations</div><div class="sv crit" id="st-viol">—</div></div>
+      <div class="stat-box"><div class="sl">Avg Response</div><div class="sv info" id="st-avg">—</div></div>
+    </div>
+  </div>
+
+  <div class="s-divider"></div>
+
+  <!-- BENCHMARK SCENARIO -->
+  <div class="s-section">
+    <div class="s-title">📊 Benchmark Scenario</div>
+    <button class="scene-btn primary" id="btn-multi" onclick="runScenario('multi_agent')">▶ Run Multi-Agent</button>
+    <button class="scene-btn" id="btn-single" onclick="runScenario('single_agent')">▶ Run Single-Agent</button>
+    <button class="scene-btn compare-btn" id="btn-compare" onclick="runCompare()">⚡ Full Comparison</button>
+  </div>
+
+  <div class="s-divider"></div>
+
+  <!-- LIVE SESSION -->
+  <div class="s-section">
+    <div class="s-title">🧪 Live Session</div>
+    <div class="sess-pill" id="sess-pill">no active session</div>
+    <div class="live-status-badge" id="live-status-badge">⚪ Idle</div>
+    <div class="dec-row">
+      <div class="dec-stepper">
+        <button onclick="adjDeclare(-1)">−</button>
+        <span class="dec-count" id="dec-count">1</span>
+        <button onclick="adjDeclare(1)">+</button>
+      </div>
+      <button class="dec-btn" id="btn-declare" onclick="openDeclareModal()">📢 Declare</button>
+    </div>
+    <button class="reset-btn" id="btn-stop" onclick="stopLiveSession()">🛑 Stop</button>
+    <button class="reset-btn" onclick="resetSession()">🗑 Clear All &amp; Reset</button>
+  </div>
+
+  <div class="s-divider"></div>
+
+  <!-- RESOURCE SETTINGS -->
+  <div class="s-section">
+    <div class="s-title">⚙ Resources (Live Session)</div>
+    <div class="res-row"><span class="res-label-s">🚑 Ambulances</span><div class="mini-stepper"><button onclick="adjRes('ambulance',-1)">−</button><span class="mini-cnt" id="cnt-ambulance">2</span><button onclick="adjRes('ambulance',1)">+</button></div></div>
+    <div class="res-row"><span class="res-label-s">🚒 Fire Trucks</span><div class="mini-stepper"><button onclick="adjRes('fire_truck',-1)">−</button><span class="mini-cnt" id="cnt-fire_truck">1</span><button onclick="adjRes('fire_truck',1)">+</button></div></div>
+    <div class="res-row"><span class="res-label-s">🚤 Rescue Boats</span><div class="mini-stepper"><button onclick="adjRes('rescue_boat',-1)">−</button><span class="mini-cnt" id="cnt-rescue_boat">1</span><button onclick="adjRes('rescue_boat',1)">+</button></div></div>
+    <button class="save-btn" onclick="saveSettings()">💾 Save Settings</button>
+    <div id="save-msg" style="font-size:10.5px;text-align:center;font-weight:700;min-height:14px;font-family:'IBM Plex Mono',monospace;"></div>
+  </div>
+
+  <div class="s-divider"></div>
+
+  <!-- AGENT GUIDE -->
+  <div class="s-section">
+    <div class="s-title">🤖 Agent Pipeline</div>
+    <div class="flow-badges">
+      <div class="flow-badge"><div class="fb-dot" style="background:var(--triage-c);box-shadow:0 0 6px var(--triage-c)"></div><span class="fb-name">Triage</span><span class="fb-desc">severity</span></div>
+      <div class="flow-badge"><div class="fb-dot" style="background:var(--alloc-c);box-shadow:0 0 6px var(--alloc-c)"></div><span class="fb-name">Allocator</span><span class="fb-desc">resource</span></div>
+      <div class="flow-badge"><div class="fb-dot" style="background:var(--audit-c);box-shadow:0 0 6px var(--audit-c)"></div><span class="fb-name">Auditor</span><span class="fb-desc">rules</span></div>
+      <div class="flow-badge"><div class="fb-dot" style="background:var(--liaison-c);box-shadow:0 0 6px var(--liaison-c)"></div><span class="fb-name">Liaison</span><span class="fb-desc">dispatch</span></div>
+    </div>
+  </div>
+
+</aside>
+
+<!-- ─── CENTER PANEL ── -->
+<main class="center">
+
+  <nav class="tabbar">
+    <button class="tab-btn active" data-tab="map">🗺 Live Map</button>
+    <button class="tab-btn" data-tab="timeline">📋 Timeline</button>
+    <button class="tab-btn" data-tab="benchmark">📊 Benchmark</button>
+  </nav>
+
+  <!-- MAP TAB -->
+  <div class="tab-panel active" id="tab-map">
+    <canvas id="map-canvas" width="600" height="600"></canvas>
+    <div class="map-legend">
+      <span class="leg-item"><span class="leg-dot" style="background:var(--critical)"></span>Critical</span>
+      <span class="leg-item"><span class="leg-dot" style="background:var(--urgent)"></span>Urgent</span>
+      <span class="leg-item"><span class="leg-dot" style="background:#fb923c"></span>Low</span>
+      <span class="leg-item"><span class="leg-ring"></span>Resolved</span>
+    </div>
+    <button class="reset-btn" id="btn-clear-map" onclick="clearMapPoints()" style="margin-top:10px;">🧹 Clear Map</button>
+  </div>
+
+  <!-- TIMELINE TAB -->
+  <div class="tab-panel" id="tab-timeline">
+    <div class="timeline-toolbar">
+      <select id="timeline-run-select" onchange="onTimelineRunSelected()"><option value="">No runs yet</option></select>
+      <button class="scene-btn" id="btn-timeline-report" onclick="downloadTimelineReport()" disabled>📄 Download Report</button>
+    </div>
+    <div id="timeline-area"><div class="empty-state"><span class="icn">📋</span>Run a scenario to see the incident timeline.</div></div>
+  </div>
+
+  <!-- BENCHMARK TAB -->
+  <div class="tab-panel" id="tab-benchmark">
+    <div class="explainer">
+      <h3>What's being measured?</h3>
+      <p><b>Quality Score (0–100)</b> — decision correctness: rule compliance, resolution rate, escalation accuracy. This is what matters for judges.<br><br>
+      <b>Avg Response Time</b> — API wall-clock time. Multi-agent = 4 Qwen calls per incident vs 1 for single-agent. It's expected to be slower. In real deployment, agents would run as parallel microservices.<br><br>
+      <b>Priority Violations</b> — did a LOW incident get a resource while a CRITICAL one was waiting? The Auditor prevents this. The single agent has no one double-checking.</p>
+    </div>
+    <button class="scene-btn" id="btn-report" onclick="downloadFullReport()" disabled style="margin-bottom:14px;">📄 Download Full Report</button>
+    <div id="scoreboard-area"><div class="empty-state"><span class="icn">📊</span>Run "Full Comparison" to see the benchmark.</div></div>
+  </div>
+
+</main>
+
+<!-- ─── RIGHT PANEL — live feed ── -->
+<aside class="right-panel">
+  <div class="rp-header">
+    <span class="rp-title">🧠 Agent Live Feed</span>
+    <span class="feed-status-badge" id="feed-status">IDLE</span>
+  </div>
+  <div class="feed-scroll" id="feed-body">
+    <div class="empty-state"><span class="icn">📡</span>Waiting for a run.</div>
+  </div>
+</aside>
+
+</div><!-- .body -->
+</div><!-- .app -->
+
+<script>
+const API = '';
+let currentRunId = null;
+let lastMultiRunId = null;
+let lastSingleRunId = null;
+let resSettings = {ambulance:2,fire_truck:1,rescue_boat:1};
+const incState = {}; // incident_id -> {x,y,priority_tier,status}
+
+/* ─── THEME ─── */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('theme-btn').textContent = isDark ? '🌙' : '☀️';
+  drawMap();
+}
+
+/* ─── TABS ─── */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn,.tab-panel').forEach(el => el.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+    if (btn.dataset.tab === 'map') resizeCanvas();
+    if (btn.dataset.tab === 'timeline') loadRunsList();
+  });
+});
+
+/* ─── WEBSOCKET ─── */
+let ws;
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws/live`);
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'ping') return;
+    onEvent(d);
+  };
+  ws.onclose = () => setTimeout(connectWS, 2000);
+}
+connectWS();
+
+let _timelineRefreshTimer = null;
+function scheduleTimelineRefresh() {
+  if (!currentRunId) return;
+  clearTimeout(_timelineRefreshTimer);
+  _timelineRefreshTimer = setTimeout(() => loadTimeline(currentRunId), 400);
+}
+
+function onEvent(d) {
+  const iid = d.incident_id;
+  if (d.type === 'incident_reported' && iid && d.x !== undefined) {
+    // Dot appears on map immediately as pending (grey), before triage assigns a color
+    if (!incState[iid]) incState[iid] = {x:d.x, y:d.y, priority_tier:null, status:'pending'};
+    drawMap();
+  } else if (d.type === 'incident_triaged' && iid) {
+    // Upsert — create entry if not present (handles mismatched seed IDs)
+    if (!incState[iid]) incState[iid] = {x:d.x||50, y:d.y||50, priority_tier:null, status:'pending'};
+    incState[iid].priority_tier = d.priority_tier;
+    incState[iid].status = 'triaged';
+    drawMap();
+  } else if (d.type === 'agent_step') {
+    addFeedLine(d);
+  } else if (d.type === 'conflict') {
+    addConflictLine(d);
+  } else if (d.type === 'incident_resolved') {
+    if (iid) {
+      if (!incState[iid]) incState[iid] = {x:d.x||50, y:d.y||50, priority_tier:'CRITICAL', status:'pending'};
+      incState[iid].status = 'resolved';
+      drawMap();
+    }
+    addFeedLine({...d, agent:'system'});
+    scheduleTimelineRefresh();
+  } else if (d.type === 'incident_escalated') {
+    if (iid) {
+      if (!incState[iid]) incState[iid] = {x:d.x||50, y:d.y||50, priority_tier:'CRITICAL', status:'pending'};
+      incState[iid].status = 'escalated';
+      drawMap();
+    }
+    scheduleTimelineRefresh();
+  } else if (d.type === 'benchmark_complete') {
+    addFeedLine({...d, agent:'system'});
+  } else if (d.type === 'incidents_declared') {
+    (d.incidents||[]).forEach(inc=>{
+      if (!incState[inc.incident_id]) incState[inc.incident_id] = {x:inc.x, y:inc.y, priority_tier:null, status:'pending'};
+      addFeedLine({agent:'system', message:`📢 ${(inc.incident_type||'').replace(/_/g,' ')} at (${inc.x}, ${inc.y}) — ${inc.needs}`});
+    });
+    drawMap();
+    if (d.run_id) { currentRunId = d.run_id; refreshSessPill(); loadRunsList(d.run_id); }
+  } else if (d.type === 'batch_complete' || d.type === 'batch_stopped' || d.type === 'batch_error' || d.type === 'session_stopped') {
+    addFeedLine({...d, agent:'system'});
+    if (currentRunId) { loadTimeline(currentRunId); syncMapFromAPI(currentRunId); loadRunsList(currentRunId); }
+    refreshSessPill();
+  }
+}
+
+function addFeedLine(d) {
+  const feed = document.getElementById('feed-body');
+  if (feed.querySelector('.empty-state')) feed.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = `feed-line ${d.agent||'system'}`;
+  div.innerHTML = `<span class="feed-tag">${(d.agent||'system').replace('_',' ')}</span>${esc(d.message||'')}`;
+  feed.appendChild(div);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function addConflictLine(d) {
+  const feed = document.getElementById('feed-body');
+  if (feed.querySelector('.empty-state')) feed.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'conflict-line';
+  div.innerHTML = `<span class="conflict-tag">⚠ AUDITOR REJECTED</span>${esc(d.message||'')}`;
+  feed.appendChild(div);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ─── MAP ─── */
+const GSIZ = 100;
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+let cSize = 400;
+
+const ROAD_PATHS = [
+  // core network radiating from HQ
+  [[22,28],[30,36],[40,43],[52,49],[63,52],[75,50],[85,46]],
+  [[22,28],[18,42],[15,56],[12,70],[9,84],[7,93]],
+  [[22,28],[28,17],[36,9],[46,4]],
+  [[22,28],[12,22],[5,18]],
+  [[22,28],[26,42],[24,58],[20,72]],
+  [[52,49],[57,36],[64,22],[70,12]],
+  [[63,52],[67,66],[73,79],[80,89]],
+  [[75,50],[78,38],[84,28],[90,20]],
+  [[40,43],[44,28],[51,16],[58,8]],
+  [[20,72],[34,76],[48,73],[60,76]],
+  [[15,56],[28,53],[40,50]],
+  [[73,79],[62,83],[50,81],[38,84]],
+  [[46,4],[58,8],[70,12]],
+  [[34,76],[30,62],[28,48]],
+  // extended network — reaches the corners and edges the original left blank
+  [[85,46],[92,55],[96,66],[97,78]],
+  [[90,20],[96,10],[99,3]],
+  [[80,89],[88,94],[96,97]],
+  [[60,76],[70,70],[80,64]],
+  [[7,93],[18,96],[30,94],[42,90]],
+  [[5,18],[2,8],[0,1]],
+  [[58,8],[66,3],[76,0]],
+  [[38,84],[36,94],[34,99]],
+  [[9,84],[20,80],[30,84]],
+  [[64,22],[72,26],[80,24]],
+  [[28,17],[36,20],[44,16]],
+  [[97,78],[90,86],[82,90]],
+  [[0,45],[10,48],[15,56]],
+  [[24,58],[36,60],[48,58]],
+  [[48,58],[54,45]],
+  [[90,20],[85,10],[76,4]],
+];
+
+const BUILDINGS = [
+  {x:48,y:72,w:6,h:5},{x:60,y:78,w:5,h:4},{x:14,y:62,w:5,h:5},
+  {x:44,y:18,w:4,h:6},{x:60,y:14,w:5,h:4},{x:30,y:22,w:4,h:4},
+  {x:54,y:45,w:5,h:5},{x:38,y:63,w:4,h:4},{x:70,y:36,w:4,h:5},
+  {x:80,y:60,w:5,h:5},{x:18,y:36,w:4,h:4},{x:64,y:64,w:4,h:4},
+  {x:36,y:82,w:5,h:4},{x:82,y:82,w:4,h:5},{x:56,y:30,w:4,h:4},
+  // extended coverage
+  {x:90,y:60,w:5,h:5},{x:94,y:75,w:4,h:4},{x:78,y:70,w:4,h:4},
+  {x:20,y:88,w:5,h:4},{x:42,y:94,w:4,h:4},{x:8,y:10,w:4,h:4},
+  {x:66,y:6,w:4,h:4},{x:76,y:22,w:4,h:5},{x:34,y:30,w:4,h:4},
+  {x:50,y:60,w:4,h:4},{x:24,y:48,w:4,h:4},{x:88,y:30,w:4,h:5},
+  {x:6,y:30,w:3,h:4},{x:94,y:12,w:4,h:4},{x:16,y:78,w:4,h:4},
+];
+
+const PARK = {x:44,y:56,w:11,h:9};
+
+const HQ = {x:22,y:28};
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width) return;
+  cSize = rect.width;
+  canvas.width = Math.round(rect.width*dpr);
+  canvas.height = Math.round(rect.width*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  drawMap();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function tc(x,y) { const s=cSize/GSIZ; return {cx:x*s, cy:cSize-y*s}; }
+
+function drawRoad(path) {
+  ctx.beginPath();
+  const s=tc(path[0][0],path[0][1]); ctx.moveTo(s.cx,s.cy);
+  for(let i=1;i<path.length;i++){
+    const p=tc(path[i][0],path[i][1]);
+    const pv=tc(path[i-1][0],path[i-1][1]);
+    ctx.quadraticCurveTo((pv.cx+p.cx)/2,(pv.cy+p.cy)/2,p.cx,p.cy);
+  }
+  ctx.stroke();
+}
+
+function getThemeColors() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    mapBg:     dark ? '#0d1022' : '#f7f8fb',
+    water:     dark ? 'rgba(30,64,175,0.35)' : '#dbeafe',
+    waterText: dark ? 'rgba(99,179,237,0.4)' : 'rgba(147,197,253,0.6)',
+    park:      dark ? 'rgba(34,197,94,0.10)' : 'rgba(34,197,94,0.15)',
+    parkStroke:dark ? 'rgba(34,197,94,0.2)' : 'rgba(34,197,94,0.3)',
+    building:  dark ? 'rgba(255,255,255,0.05)' : '#e9ecf3',
+    buildStroke: dark ? 'rgba(255,255,255,0.08)' : '#dde1ea',
+    road:      dark ? 'rgba(255,255,255,0.08)' : '#d8dce8',
+    roadLine:  dark ? 'rgba(255,255,255,0.03)' : '#fdfdfe',
+    compass:   dark ? 'rgba(255,255,255,0.25)' : '#a8acba',
+    hq:        dark ? '#63b3ed' : '#2563eb',
+    hqText:    '#ffffff',
+  };
+}
+
+function drawMap() {
+  if(!cSize) return;
+  const C = getThemeColors();
+  const sc = cSize/GSIZ;
+  ctx.clearRect(0,0,cSize,cSize);
+  ctx.fillStyle = C.mapBg; ctx.fillRect(0,0,cSize,cSize);
+
+  // water
+  ctx.fillStyle = C.water;
+  ctx.beginPath();
+  const w1=tc(65,0),w2=tc(100,0),w3=tc(100,32),w4=tc(88,37),w5=tc(74,26);
+  ctx.moveTo(w1.cx,w1.cy); ctx.lineTo(w2.cx,w2.cy); ctx.lineTo(w3.cx,w3.cy);
+  ctx.quadraticCurveTo(w4.cx,w4.cy,w5.cx,w5.cy); ctx.lineTo(w1.cx,w1.cy);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = C.waterText; ctx.font='700 9px IBM Plex Mono'; ctx.fillText('WATER',cSize-52,cSize-6);
+
+  // park
+  const pk=tc(PARK.x,PARK.y);
+  ctx.fillStyle=C.park; ctx.strokeStyle=C.parkStroke; ctx.lineWidth=1;
+  ctx.fillRect(pk.cx-(PARK.w*sc)/2,pk.cy-(PARK.h*sc)/2,PARK.w*sc,PARK.h*sc);
+  ctx.strokeRect(pk.cx-(PARK.w*sc)/2,pk.cy-(PARK.h*sc)/2,PARK.w*sc,PARK.h*sc);
+
+  // buildings
+  BUILDINGS.forEach(b=>{
+    const {cx,cy}=tc(b.x,b.y);
+    ctx.fillStyle=C.building; ctx.strokeStyle=C.buildStroke; ctx.lineWidth=1;
+    ctx.fillRect(cx-(b.w*sc)/2,cy-(b.h*sc)/2,b.w*sc,b.h*sc);
+    ctx.strokeRect(cx-(b.w*sc)/2,cy-(b.h*sc)/2,b.w*sc,b.h*sc);
+  });
+
+  // roads
+  ctx.strokeStyle=C.road; ctx.lineWidth=6; ctx.lineCap='round';
+  ROAD_PATHS.forEach(drawRoad);
+  ctx.strokeStyle=C.roadLine; ctx.lineWidth=2;
+  ROAD_PATHS.forEach(drawRoad);
+
+  // compass
+  ctx.fillStyle=C.compass; ctx.font='700 9.5px IBM Plex Mono'; ctx.textAlign='left';
+  ctx.fillText('NW',6,13); ctx.fillText('NE',cSize-24,13); ctx.fillText('SW',6,cSize-6);
+  ctx.fillText('SE',cSize-24,cSize-6);
+
+  // HQ
+  const hq=tc(HQ.x,HQ.y);
+  const hqGrad=ctx.createRadialGradient(hq.cx,hq.cy,0,hq.cx,hq.cy,14);
+  hqGrad.addColorStop(0,'rgba(99,179,237,0.25)'); hqGrad.addColorStop(1,'transparent');
+  ctx.fillStyle=hqGrad; ctx.beginPath(); ctx.arc(hq.cx,hq.cy,14,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=C.hq;
+  ctx.fillRect(hq.cx-9,hq.cy-9,18,18);
+  ctx.strokeStyle='rgba(255,255,255,0.8)'; ctx.lineWidth=1.5; ctx.strokeRect(hq.cx-9,hq.cy-9,18,18);
+  ctx.fillStyle=C.hqText; ctx.font='700 8.5px IBM Plex Mono'; ctx.textAlign='center';
+  ctx.fillText('HQ',hq.cx,hq.cy+3); ctx.textAlign='left';
+
+  // incidents — correct colors, clear states
+  Object.entries(incState).forEach(([iid,inc])=>{
+    const {cx,cy}=tc(inc.x,inc.y);
+    const tier=inc.priority_tier;
+    const dark = document.documentElement.getAttribute('data-theme')==='dark';
+    // CRITICAL=dark red, URGENT=orange, LOW=light orange (or white for unknown tier)
+    const color = tier==='CRITICAL' ? (dark?'#fc8181':'#b91c1c') :
+                  tier==='URGENT'   ? (dark?'#f6ad55':'#ea580c') :
+                  tier==='LOW'      ? (dark?'#fbd38d':'#fb923c') :
+                                      (dark?'#a0aec0':'#94a3b8'); // pending/unknown
+
+    const isCrit = tier==='CRITICAL';
+    const r = isCrit ? 11 : tier==='URGENT' ? 8 : 7;
+
+    if(inc.status==='resolved'){
+      // Green outline only — no fill, just the ring
+      const rc = dark ? '#68d391' : '#16a34a';
+      // soft glow behind
+      const grad=ctx.createRadialGradient(cx,cy,2,cx,cy,13);
+      grad.addColorStop(0,dark?'rgba(104,211,145,0.2)':'rgba(22,163,74,0.12)');
+      grad.addColorStop(1,'transparent');
+      ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(cx,cy,13,0,Math.PI*2); ctx.fill();
+      // ring
+      ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2);
+      ctx.strokeStyle=rc; ctx.lineWidth=2.5; ctx.stroke();
+
+    } else if(inc.status==='escalated'){
+      // Clearly visible but faded — show incident was real but couldn't be handled
+      ctx.globalAlpha=0.5;
+      const glowG=ctx.createRadialGradient(cx,cy,0,cx,cy,r+6);
+      glowG.addColorStop(0,color+'44'); glowG.addColorStop(1,'transparent');
+      ctx.fillStyle=glowG; ctx.beginPath(); ctx.arc(cx,cy,r+6,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.fillStyle=color; ctx.fill();
+      ctx.strokeStyle=dark?'rgba(255,255,255,0.6)':'rgba(0,0,0,0.3)';
+      ctx.lineWidth=2; ctx.stroke();
+      ctx.globalAlpha=1;
+
+    } else {
+      // Active / pending — full glow + solid dot
+      const glowR = r + (isCrit ? 12 : 8);
+      const glowGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,glowR);
+      glowGrad.addColorStop(0,color+(isCrit?'66':'44'));
+      glowGrad.addColorStop(1,'transparent');
+      ctx.fillStyle=glowGrad; ctx.beginPath(); ctx.arc(cx,cy,glowR,0,Math.PI*2); ctx.fill();
+      // solid dot
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.fillStyle=color; ctx.fill();
+      ctx.strokeStyle=dark?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.9)';
+      ctx.lineWidth=2.5; ctx.stroke();
+    }
+  });
+}
+
+/* ─── CONTROLS ─── */
+function setBtnsDisabled(d) {
+  ['btn-multi','btn-single','btn-compare'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.disabled=d;
+  });
+}
+
+function setStatus(txt) {
+  const el=document.getElementById('feed-status');
+  el.textContent=txt;
+  el.className='feed-status-badge';
+  if(txt==='RUNNING'||txt==='COMPARING') el.classList.add('running');
+  else if(txt==='COMPLETE') el.classList.add('complete');
+  else if(txt==='ERROR') el.classList.add('error');
+}
+
+function animStat(id,val) {
+  const el=document.getElementById(id); if(!el) return;
+  const txt=val==null?'—':String(val);
+  if(el.textContent===txt) return;
+  el.textContent=txt;
+  el.classList.remove('popped'); void el.offsetWidth; el.classList.add('popped');
+}
+
+function setStats(r) {
+  animStat('st-inc',r.total_incidents);
+  animStat('st-res',r.resolved_incidents);
+  animStat('st-viol',r.priority_violations);
+  animStat('st-avg',r.avg_response_time_seconds?r.avg_response_time_seconds.toFixed(0)+'s':'—');
+}
+
+
+
+async function runScenario(mode) {
+  setBtnsDisabled(true); setStatus('RUNNING');
+  document.getElementById('feed-body').innerHTML='';
+  Object.keys(incState).forEach(k=>delete incState[k]);
+  drawMap();
+  // Clear the previous report pairing — a fresh run makes room for a fresh report,
+  // it should never mix with a stale run from earlier.
+  lastMultiRunId = null; lastSingleRunId = null;
+  document.getElementById('btn-report').disabled = true;
+  try {
+    const r=await fetch(`${API}/api/run`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario_name:'random',mode,resource_counts:resSettings})});
+    const result=await r.json();
+    currentRunId=result.run_id;
+    if (mode==='multi_agent') lastMultiRunId=result.run_id; else lastSingleRunId=result.run_id;
+    document.getElementById('btn-report').disabled=false;
+    setStatus('COMPLETE'); setStats(result);
+    await syncMapFromAPI(result.run_id);
+    await loadTimeline(result.run_id);
+    await loadRunsList(result.run_id);
+  } catch(e){ setStatus('ERROR'); console.error(e); }
+  setBtnsDisabled(false);
+}
+
+async function runCompare() {
+  setBtnsDisabled(true); setStatus('COMPARING');
+  document.getElementById('feed-body').innerHTML='';
+  Object.keys(incState).forEach(k=>delete incState[k]);
+  drawMap();
+  lastMultiRunId = null; lastSingleRunId = null;
+  document.getElementById('btn-report').disabled = true;
+  try {
+    const r=await fetch(`${API}/api/compare`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario_name:'random',resource_counts:resSettings})});
+    const result=await r.json();
+    setStatus('COMPLETE'); setStats(result.multi_agent);
+    renderScoreboard(result);
+    currentRunId=result.multi_agent.run_id;
+    lastMultiRunId=result.multi_agent.run_id;
+    lastSingleRunId=result.single_agent.run_id;
+    document.getElementById('btn-report').disabled=false;
+    // The map stays clear after a Full Comparison rather than showing its dots —
+    // it's a benchmark run, not something that should clutter the live map.
+    Object.keys(incState).forEach(k=>delete incState[k]);
+    drawMap();
+    await loadTimeline(currentRunId);
+    await loadRunsList();
+  } catch(e){ setStatus('ERROR'); console.error(e); }
+  setBtnsDisabled(false);
+}
+
+function fmtAgentMsg(m) {
+  let p = {};
+  try { p = typeof m.content === 'string' ? JSON.parse(m.content) : (m.content||{}); }
+  catch(e) { p = {raw: m.content}; }
+  const role = m.agent_role;
+  if (role === 'triage')
+    return `- **Triage** → ${p.priority_tier||'?'} (severity ${p.severity_score ?? '?'}). ${p.reasoning||''}`;
+  if (role === 'allocator')
+    return `- **Allocator** → ${p.recommended_resource_id ? `proposed \`${p.recommended_resource_id}\`` : 'no suitable resource found'}${p.alternative_resource_id ? ` (alt: \`${p.alternative_resource_id}\`)` : ''}. ${p.reasoning||''}`;
+  if (role === 'auditor')
+    return `- **Auditor** → ${p.approved ? '✅ APPROVED' : `❌ REJECTED (${p.violation_type||'rule violation'})`}. ${p.explanation||''}`;
+  if (role === 'liaison')
+    return `- **Field Liaison** → dispatch instructions (ETA ${p.eta_seconds ?? '?'}s): "${p.instructions||''}"`;
+  if (role === 'single_agent')
+    return `- **Single Agent** → ${p.priority_tier||'?'} (severity ${p.severity_score ?? '?'}), ${p.recommended_resource_id ? `dispatched \`${p.recommended_resource_id}\`` : 'escalated'}. ${p.reasoning||''}${p.instructions?` Instructions: "${p.instructions}"`:''}`;
+  if (role === 'system') {
+    if (p.note) return `- **System (tie-break)** → ${p.note}`;
+    if (p.available_count !== undefined) return `- **System** → ${p.available_count} matching resource(s) were actually available at this moment.`;
+    return `- **System** → ${JSON.stringify(p)}`;
+  }
+  return `- **${role}** → ${typeof m.content==='string'?m.content:JSON.stringify(m.content)}`;
+}
+
+async function fetchRunFull(runId) {
+  const [runRes, transcriptRes] = await Promise.all([
+    fetch(`${API}/api/runs/${runId}`),
+    fetch(`${API}/api/runs/${runId}/transcript`)
+  ]);
+  return { runData: await runRes.json(), transcript: await transcriptRes.json() };
+}
+
+function resourcesSummaryMd(resources) {
+  if (!resources || !resources.length) return '_(no resource data)_\n\n';
+  const byType = {};
+  resources.forEach(r => { (byType[r.resource_type] = byType[r.resource_type] || []).push(r); });
+  let out = '';
+  Object.entries(byType).forEach(([rtype, list]) => {
+    out += `- **${rtype.replace('_',' ')}** × ${list.length}: ${list.map(r=>r.resource_id).join(', ')}\n`;
+  });
+  return out + '\n';
+}
+
+function buildRunSection(title, runData, transcript) {
+  const run = runData.run || {};
+  const incidents = runData.incidents || [];
+  const dispatches = runData.dispatches || [];
+  const resources = runData.resources || [];
+  const byIncident = {};
+  transcript.forEach(m => { (byIncident[m.incident_id] = byIncident[m.incident_id] || []).push(m); });
+
+  let out = `## ${title}\n\n`;
+  out += `| Metric | Value |\n|---|---|\n`;
+  out += `| Run ID | \`${run.run_id||''}\` |\n`;
+  out += `| Quality Score | ${run.quality_score ?? '?'}/100 |\n`;
+  out += `| Resolved | ${run.resolved_incidents ?? 0}/${run.total_incidents ?? incidents.length} |\n`;
+  out += `| Escalated (no resource) | ${run.escalated_incidents ?? 0} |\n`;
+  out += `| Priority violations | ${run.priority_violations ?? 0} |\n`;
+  out += `| Double-assignments | ${run.double_assignments ?? 0} |\n`;
+  out += `| Avg response time | ${run.avg_response_time_seconds ?? '—'}s |\n\n`;
+
+  out += `**Resources available for this run:**\n\n${resourcesSummaryMd(resources)}`;
+
+  incidents.forEach((inc, idx) => {
+    const msgs = (byIncident[inc.incident_id] || []).sort((a,b)=>a.id-b.id);
+    const dispatch = dispatches.find(d => d.incident_id === inc.incident_id);
+    out += `### Incident ${idx+1}: ${(inc.incident_type||'').replace(/_/g,' ')} — (${inc.x}, ${inc.y})\n\n`;
+    out += `**Tier:** ${inc.priority_tier || '?'}  •  **Final status:** ${inc.status || '?'}\n\n`;
+    if (dispatch) out += `**Dispatched:** \`${dispatch.resource_id}\` — ETA ${dispatch.eta_seconds}s — "${dispatch.instructions}"\n\n`;
+    out += `**Agent reasoning trail:**\n\n`;
+    if (msgs.length === 0) out += `_(no messages logged)_\n\n`;
+    msgs.forEach(m => { out += fmtAgentMsg(m) + '\n'; });
+    out += `\n---\n\n`;
+  });
+
+  return out;
+}
+
+async function downloadFullReport() {
+  if (!lastMultiRunId && !lastSingleRunId) return;
+  const btn = document.getElementById('btn-report');
+  btn.disabled = true; const oldLabel = btn.textContent; btn.textContent = '⏳ Building report…';
+
+  try {
+    let report = `# CrisisDesk Full Benchmark Report\n\nGenerated: ${new Date().toISOString()}\n\n`;
+    report += `This report includes the complete agent reasoning trail (Triage → Allocator ↔ Auditor → Liaison, or the single-agent equivalent) for every incident in the most recent run(s), plus the final dispatch/escalation outcome.\n\n`;
+
+    if (lastMultiRunId) {
+      const { runData, transcript } = await fetchRunFull(lastMultiRunId);
+      report += buildRunSection('🧠 Multi-Agent Run', runData, transcript);
+    }
+    if (lastSingleRunId) {
+      const { runData, transcript } = await fetchRunFull(lastSingleRunId);
+      report += buildRunSection('🤖 Single-Agent Run', runData, transcript);
+    }
+
+    const blob = new Blob([report], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `crisisdesk_report_${Date.now()}.md`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error(e);
+  }
+  btn.disabled = false; btn.textContent = oldLabel;
+}
+
+async function syncMapFromAPI(runId) {
+  try {
+    const r=await fetch(`${API}/api/runs/${runId}`);
+    const d=await r.json();
+    const incs=d.incidents||[];
+    if(!incs.length) return;
+    // Full replace — wipe seeds and stale state, use API ground truth only
+    Object.keys(incState).forEach(k=>delete incState[k]);
+    incs.forEach(inc=>{
+      // DB stores 'escalated_no_resource'; the rest of the map code (drawMap,
+      // clearMapPoints) expects the shorter 'escalated' used by live websocket
+      // events — normalize here so both paths agree.
+      const status = inc.status === 'escalated_no_resource' ? 'escalated' : inc.status;
+      incState[inc.incident_id]={x:inc.x,y:inc.y,priority_tier:inc.priority_tier,status};
+    });
+    drawMap();
+  } catch(e){ console.error('syncMapFromAPI',e); }
+}
+
+/* ─── LIVE SESSION ─── */
+function adjDeclare(d) {
+  const el=document.getElementById('dec-count');
+  el.textContent=Math.max(0,Math.min(9,(parseInt(el.textContent)||1)+d));
+}
+
+let resSettingsSyncedOnce = false;
+
+async function refreshSessPill() {
+  try {
+    const r=await fetch(`${API}/api/live/settings`);
+    const d=await r.json();
+    if (!resSettingsSyncedOnce) {
+      resSettings=d.resource_counts;
+      Object.keys(resSettings).forEach(k=>{const el=document.getElementById(`cnt-${k}`);if(el)el.textContent=resSettings[k];});
+      resSettingsSyncedOnce = true;
+    }
+    const pill=document.getElementById('sess-pill');
+    if(d.active){
+      pill.textContent=`active — ${d.declared_count} incidents${d.processing?' — agents deciding…':''}`;
+      pill.classList.add('active');
+    } else {
+      pill.textContent='no active session';
+      pill.classList.remove('active');
+    }
+    const badge=document.getElementById('live-status-badge');
+    const open=d.open_incidents||0;
+    if (open > 0) {
+      badge.textContent = `🟠 ${open} active incident${open>1?'s':''}`;
+      badge.classList.add('busy');
+    } else {
+      badge.textContent = '⚪ Idle';
+      badge.classList.remove('busy');
+    }
+  } catch(e){}
+}
+
+let incidentTypesCache = null;
+
+async function loadIncidentTypes() {
+  try {
+    const r=await fetch(`${API}/api/incident-types`);
+    incidentTypesCache = await r.json();
+  } catch(e){ console.error(e); incidentTypesCache = {}; }
+}
+
+function incidentTypeOptionsHtml(selected) {
+  let opts = `<option value="random"${selected==='random'?' selected':''}>🎲 Random</option>`;
+  Object.entries(incidentTypesCache || {}).forEach(([key,info])=>{
+    opts += `<option value="${key}"${key===selected?' selected':''}>${info.label} (${(info.resource||'').replace('_',' ')}, severity ${info.base_severity})</option>`;
+  });
+  return opts;
+}
+
+function openDeclareModal() {
+  const count=parseInt(document.getElementById('dec-count').textContent)||0;
+  if(!count) return;
+  if (!incidentTypesCache) { loadIncidentTypes().then(openDeclareModal); return; }
+
+  let rows = '';
+  for (let i=1; i<=count; i++) {
+    rows += `
+      <div class="declare-row-item">
+        <label>Incident ${i}</label>
+        <select id="declare-type-${i}">${incidentTypeOptionsHtml('random')}</select>
+      </div>`;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'declare-modal-overlay';
+  overlay.id = 'declare-modal-overlay';
+  overlay.innerHTML = `
+    <div class="declare-modal">
+      <div class="declare-modal-head">📢 Declare ${count} incident${count>1?'s':''} — pick a type for each</div>
+      <div class="declare-modal-body">${rows}</div>
+      <div class="declare-modal-foot">
+        <button class="declare-cancel-btn" onclick="closeDeclareModal()">Cancel</button>
+        <button class="declare-confirm-btn" onclick="confirmDeclareModal(${count})">Declare All</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function closeDeclareModal() {
+  const el = document.getElementById('declare-modal-overlay');
+  if (el) el.remove();
+}
+
+async function confirmDeclareModal(count) {
+  const incident_types = [];
+  for (let i=1; i<=count; i++) {
+    const sel = document.getElementById(`declare-type-${i}`);
+    incident_types.push(sel && sel.value!=='random' ? sel.value : null);
+  }
+  closeDeclareModal();
+  await declareIncidents(incident_types);
+}
+
+async function declareIncidents(incident_types) {
+  const count = incident_types.length;
+  if(!count) return;
+  // Note: intentionally NOT disabling the Declare button or awaiting full
+  // completion here — the backend processes this batch in the background,
+  // so you can keep declaring more incidents (or hit Stop) while agents are
+  // still deciding on the current ones. Live progress streams in via the
+  // websocket feed (agent_step / incident_triaged / incident_resolved etc).
+  try {
+    const r=await fetch(`${API}/api/live/declare`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count, incident_types})});
+    const result=await r.json();
+    currentRunId=result.run_id;
+    await refreshSessPill();
+  } catch(e){ console.error(e); }
+}
+
+async function stopLiveSession() {
+  try {
+    await fetch(`${API}/api/live/stop`,{method:'POST'});
+    await refreshSessPill();
+  } catch(e){ console.error(e); }
+}
+
+async function resetSession() {
+  await fetch(`${API}/api/live/reset`,{method:'POST'});
+  currentRunId=null; Object.keys(incState).forEach(k=>delete incState[k]);
+  if (timelineRunId) { timelineRunId=null; await loadRunsList(); }
+  document.getElementById('feed-body').innerHTML='<div class="empty-state"><span class="icn">📡</span>Waiting for a run.</div>';
+  setStatus('IDLE'); ['st-inc','st-res','st-viol','st-avg'].forEach(id=>document.getElementById(id).textContent='—');
+  drawMap(); await refreshSessPill();
+}
+
+/* ─── SETTINGS ─── */
+function adjRes(type,d) {
+  resSettings[type]=Math.max(0,Math.min(9,(resSettings[type]||0)+d));
+  document.getElementById(`cnt-${type}`).textContent=resSettings[type];
+}
+
+async function saveSettings() {
+  const r=await fetch(`${API}/api/live/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(resSettings)});
+  const msg=document.getElementById('save-msg');
+  if(r.ok){
+    const d=await r.json();
+    const added=d.added||{};
+    const addedBits=Object.entries(added).map(([t,n])=>`+${n} ${t.replace('_',' ')}`);
+    msg.textContent = addedBits.length ? `✓ Saved — ${addedBits.join(', ')}` : '✓ Saved';
+    msg.style.color='var(--resolved-c)';
+  } else {
+    const e=await r.json();
+    msg.textContent=`✗ ${e.detail||'Could not save'}`;
+    msg.style.color='var(--critical)';
+  }
+  setTimeout(()=>msg.textContent='',4000);
+}
+
+/* ─── BENCHMARK SCOREBOARD ─── */
+function renderScoreboard(result) {
+  const m=result.multi_agent,s=result.single_agent,c=result.comparison;
+  const mq=m.quality_score||0,sq=s.quality_score||0;
+  const mw=mq>=sq;
+
+  document.getElementById('scoreboard-area').innerHTML=`
+    <div class="quality-scores">
+      <div class="q-score-box ${mw?'winner':''}">
+        <div class="ql">🧠 Multi-Agent Quality</div>
+        <div class="qv" style="color:${mw?'var(--resolved-c)':'var(--critical)'}">${mq}<span style="font-size:16px;font-weight:600">/100</span></div>
+      </div>
+      <div class="q-score-box ${!mw?'winner':''}">
+        <div class="ql">🤖 Single-Agent Quality</div>
+        <div class="qv" style="color:${!mw?'var(--resolved-c)':'var(--critical)'}">${sq}<span style="font-size:16px;font-weight:600">/100</span></div>
+      </div>
+    </div>
+
+    <div class="bench-grid">
+      <div class="bench-col ${mw?'winner':''}">
+        <h4>🧠 Multi-Agent (4 roles)</h4>
+        <div class="bench-metric"><span>Quality Score</span><span class="mv" style="color:${mw?'var(--resolved-c)':'var(--text)'}">${mq}/100</span></div>
+        <div class="bench-metric"><span>Resolved</span><span class="mv">${m.resolved_incidents}/${m.total_incidents}</span></div>
+        <div class="bench-metric"><span>Priority violations</span><span class="mv" style="color:${m.priority_violations>0?'var(--critical)':'var(--resolved-c)'}">${m.priority_violations}</span></div>
+        <div class="bench-metric"><span>Double-assignments</span><span class="mv" style="color:${m.double_assignments>0?'var(--critical)':'var(--resolved-c)'}">${m.double_assignments}</span></div>
+        <div class="bench-metric"><span>Avg response time</span><span class="mv">${m.avg_response_time_seconds?m.avg_response_time_seconds.toFixed(1)+'s':'—'}</span></div>
+      </div>
+      <div class="bench-col ${!mw?'winner':''}">
+        <h4>🤖 Single-Agent</h4>
+        <div class="bench-metric"><span>Quality Score</span><span class="mv" style="color:${!mw?'var(--resolved-c)':'var(--text)'}">${sq}/100</span></div>
+        <div class="bench-metric"><span>Resolved</span><span class="mv">${s.resolved_incidents}/${s.total_incidents}</span></div>
+        <div class="bench-metric"><span>Priority violations</span><span class="mv" style="color:${s.priority_violations>0?'var(--critical)':'var(--resolved-c)'}">${s.priority_violations}</span></div>
+        <div class="bench-metric"><span>Double-assignments</span><span class="mv" style="color:${s.double_assignments>0?'var(--critical)':'var(--resolved-c)'}">${s.double_assignments}</span></div>
+        <div class="bench-metric"><span>Avg response time</span><span class="mv">${s.avg_response_time_seconds?s.avg_response_time_seconds.toFixed(1)+'s':'—'}</span></div>
+      </div>
+    </div>
+
+    ${c&&c.improvements?`
+    <div class="impr-banner">
+      Auditor caught <b>${c.improvements.priority_violations_avoided??0}</b> extra violation(s).
+      Quality difference: <b>${c.improvements.quality_score_diff>0?'+':''}${c.improvements.quality_score_diff??0}</b> pts.
+      ${mw?'<b style="color:var(--resolved-c)">Multi-agent wins on decision quality.</b>':'Both scored similarly — try again, LLM responses vary slightly each run.'}
+    </div>`:''}
+
+    <div class="response-note">
+      ⚠ Response time: Multi-agent = 4 sequential Qwen API calls vs 1 for single-agent. It's expected to be slower — this measures API latency, not real-world dispatch speed. The meaningful comparison is decision quality and rule compliance.
+    </div>
+  `;
+}
+
+/* ─── TIMELINE ─── */
+let timelineRunId = null;
+
+async function loadTimeline(runId) {
+  if (!runId) return;
+  timelineRunId = runId;
+  const reportBtn = document.getElementById('btn-timeline-report');
+  if (runId === '__all__') {
+    if (reportBtn) reportBtn.disabled = true;
+    await loadAllRunsTimeline();
+    return;
+  }
+  if (reportBtn) reportBtn.disabled = false;
+  try {
+    const [dr,mr]=await Promise.all([
+      fetch(`${API}/api/runs/${runId}`),
+      fetch(`${API}/api/runs/${runId}/transcript`)
+    ]);
+    const detail=await dr.json();
+    const messages=await mr.json();
+    renderTimeline(detail.incidents||[],messages||[]);
+  } catch(e){ console.error(e); }
+}
+
+async function loadRunsList(preselectRunId) {
+  try {
+    const r = await fetch(`${API}/api/runs`);
+    const runs = await r.json();
+    const sel = document.getElementById('timeline-run-select');
+    const priorSelection = sel.value;
+
+    let optionsHtml = `<option value="__all__">🗂 All Runs (stacked)</option>`;
+    if (runs && runs.length) {
+      optionsHtml += runs.map(run => {
+        const icon = run.scenario_name === 'live_session' ? '🧪' : (run.mode === 'multi_agent' ? '🧠' : '🤖');
+        const label = run.scenario_name === 'live_session' ? 'Live Session' : (run.mode === 'multi_agent' ? 'Multi-Agent' : 'Single-Agent');
+        let when = '';
+        try { when = run.started_at ? new Date(run.started_at + 'Z').toLocaleTimeString() : ''; } catch(e){}
+        return `<option value="${run.run_id}">${icon} ${label} — ${run.total_incidents||0} incident(s) — ${when}</option>`;
+      }).join('');
+    }
+    sel.innerHTML = optionsHtml;
+
+    // Only jump to a specific run if it was explicitly requested or already
+    // selected — otherwise default to the combined stacked view, so nothing
+    // that was previously visible ever silently disappears.
+    const candidate = preselectRunId || priorSelection;
+    const stillExists = candidate === '__all__' || (runs||[]).some(r => r.run_id === candidate);
+    sel.value = (candidate && stillExists) ? candidate : '__all__';
+    await onTimelineRunSelected();
+  } catch(e){ console.error(e); }
+}
+
+async function onTimelineRunSelected() {
+  const sel = document.getElementById('timeline-run-select');
+  if (sel.value) await loadTimeline(sel.value);
+}
+
+async function loadAllRunsTimeline() {
+  try {
+    const r = await fetch(`${API}/api/runs`);
+    const runs = await r.json();
+    if (!runs || !runs.length) { renderTimeline([], []); return; }
+    const details = await Promise.all(runs.map(run => fetchRunFull(run.run_id).catch(()=>null)));
+    let allIncidents = [];
+    let allMessages = [];
+    runs.forEach((run, idx) => {
+      const d = details[idx];
+      if (!d) return;
+      const runLabel = run.scenario_name === 'live_session' ? '🧪 Live' : (run.mode === 'multi_agent' ? '🧠 Multi' : '🤖 Single');
+      (d.runData.incidents||[]).forEach(inc => allIncidents.push({...inc, _run_label: runLabel}));
+      allMessages = allMessages.concat(d.transcript||[]);
+    });
+    allIncidents.sort((a,b)=> (a.reported_at||'').localeCompare(b.reported_at||''));
+    renderTimeline(allIncidents, allMessages);
+  } catch(e){ console.error(e); }
+}
+
+async function downloadTimelineReport() {
+  if (!timelineRunId) return;
+  const btn = document.getElementById('btn-timeline-report');
+  btn.disabled = true; const oldLabel = btn.textContent; btn.textContent = '⏳ Building…';
+  try {
+    const { runData, transcript } = await fetchRunFull(timelineRunId);
+    const run = runData.run || {};
+    const label = run.scenario_name === 'live_session'
+      ? '🧪 Live Session Run'
+      : (run.mode === 'multi_agent' ? '🧠 Multi-Agent Run' : '🤖 Single-Agent Run');
+    let report = `# CrisisDesk Incident Report\n\nGenerated: ${new Date().toISOString()}\n\n`;
+    report += buildRunSection(label, runData, transcript);
+
+    const blob = new Blob([report], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `crisisdesk_${timelineRunId}_report.md`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e){ console.error(e); }
+  btn.disabled = false; btn.textContent = oldLabel;
+}
+
+function renderTimeline(incidents,messages) {
+  const area=document.getElementById('timeline-area');
+  if(!incidents.length){area.innerHTML='<div class="empty-state"><span class="icn">📋</span>No incidents.</div>';return;}
+  const byInc={};
+  messages.forEach(m=>{byInc[m.incident_id]=byInc[m.incident_id]||[];byInc[m.incident_id].push(m);});
+  area.innerHTML=incidents.map((inc,idx)=>{
+    const msgs=byInc[inc.incident_id]||[];
+    const steps=msgs.map(m=>{
+      let p={};
+      try{p=JSON.parse(m.content);}catch(e){}
+      if(m.agent_role==='triage') return `<div class="step-row"><div class="step-icon triage">🩺</div><div class="step-content"><div class="step-label">Triage — Severity Assessment</div><div class="step-text"><span class="tier-pill ${p.priority_tier||''}">${p.priority_tier||'?'}</span> &nbsp;severity ${p.severity_score||'?'} — ${esc(p.reasoning||'')}</div></div></div>`;
+      if(m.agent_role==='allocator') return `<div class="step-row"><div class="step-icon allocator">📋</div><div class="step-content"><div class="step-label">Allocator — Resource Proposal</div><div class="step-text">${p.recommended_resource_id?`Proposed <b>${esc(p.recommended_resource_id)}</b> — ${esc(p.reasoning||'')}`:`No resource available — ${esc(p.reasoning||'')}`}</div></div></div>`;
+      if(m.agent_role==='auditor'){const ok=p.approved;return `<div class="step-row"><div class="step-icon ${ok?'auditor':'rejected'}">${ok?'🔍':'⚠️'}</div><div class="step-content"><div class="step-label">Auditor — ${ok?'APPROVED':'REJECTED'}</div><div class="step-text">${esc(p.explanation||'')}</div>${!ok?'<div class="reject-banner">Proposal sent back for revision.</div>':''}</div></div>`;}
+      if(m.agent_role==='liaison') return `<div class="step-row"><div class="step-icon liaison">📡</div><div class="step-content"><div class="step-label">Liaison — Dispatch Instructions</div><div class="step-text">${esc(p.instructions||'')} <span style="color:var(--text-faint)">(ETA ${p.eta_seconds}s)</span></div></div></div>`;
+      if(m.agent_role==='single_agent') return `<div class="step-row"><div class="step-icon" style="background:var(--system-c)">🤖</div><div class="step-content"><div class="step-label">Single Agent — Full Decision</div><div class="step-text">${p.recommended_resource_id?`Dispatched <b>${esc(p.recommended_resource_id)}</b> — `:''} ${esc(p.reasoning||'')}</div></div></div>`;
+      if(m.agent_role==='system'){
+        const isTie = !!p.note;
+        const text = isTie ? p.note : (p.available_count!==undefined ? `${p.available_count} matching resource(s) were actually available at this moment.` : JSON.stringify(p));
+        return `<div class="step-row"><div class="step-icon" style="background:var(--muted-c,#64748b)">${isTie?'⚖️':'🗂️'}</div><div class="step-content"><div class="step-label">System — ${isTie?'Tie-Break Reasoning':'Escalation Check'}</div><div class="step-text">${esc(text)}</div></div></div>`;
+      }
+      return '';
+    }).join('');
+    return `<div class="inc-card" id="card-${inc.incident_id}"><div class="inc-head" onclick="toggleCard('${inc.incident_id}')"><div class="inc-title"><span class="inc-num">#${idx+1}</span>${inc._run_label?`<span class="run-badge">${inc._run_label}</span>`:''}<span class="inc-name">${(inc.incident_type||'').replace(/_/g,' ')}</span><span class="inc-coords">(${inc.x}, ${inc.y})</span></div><div class="inc-badges">${inc.priority_tier?`<span class="tier-pill ${inc.priority_tier}">${inc.priority_tier}</span>`:''}<span class="status-pill ${inc.status}">${(inc.status||'').replace(/_/g,' ')}</span><span class="chevron">▾</span></div></div><div class="inc-body">${steps||'<div class="empty-state" style="padding:20px">No data.</div>'}</div></div>`;
+  }).join('');
+}
+
+function clearMapPoints() {
+  Object.keys(incState).forEach(k=>{
+    const st = incState[k].status;
+    if (st === 'resolved' || st === 'escalated') delete incState[k];
+  });
+  drawMap();
+}
+
+function toggleCard(id){document.getElementById(`card-${id}`).classList.toggle('open');}
+
+resizeCanvas();
+refreshSessPill();
+loadIncidentTypes();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+[Unit]
+Description=CrisisDesk multi-agent dispatch simulation
+After=network.target
+
+[Service]
+Type=simple
+# Edit these two paths to match where you cloned the repo on the server.
+WorkingDirectory=/opt/crisisdesk
+ExecStart=/opt/crisisdesk/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=3
+EnvironmentFile=/opt/crisisdesk/.env
+# Runs as root by default on a fresh clone; for better security create a
+# dedicated user (e.g. `sudo adduser --system --group crisisdesk`) and
+# uncomment the two lines below, then chown -R crisisdesk:crisisdesk /opt/crisisdesk
+# User=crisisdesk
+# Group=crisisdesk
+
+[Install]
+WantedBy=multi-user.target
