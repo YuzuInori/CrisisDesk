@@ -1,6 +1,3 @@
-"""
-CrisisDesk FastAPI Routes
-"""
 import asyncio
 import random
 import uuid
@@ -149,24 +146,44 @@ def health():
 
 # ─── Benchmark Endpoints ───────────────────────────────────────────────────────
 
+# Tracked separately from live_session.active_tasks since Run/Compare aren't
+# tied to a live session — but Stop should be able to cancel whichever kind
+# of work is actually in flight.
+active_benchmark_tasks: set = set()
+
+
 @app.post("/api/run")
 async def run_scenario(req: RunScenarioRequest):
     if req.mode not in ("multi_agent", "single_agent"):
         raise HTTPException(400, "mode must be 'multi_agent' or 'single_agent'")
     resource_counts = req.resource_counts or live_session.resource_counts
-    return await run_benchmark_scenario(
+    task = asyncio.create_task(run_benchmark_scenario(
         req.mode, req.scenario_name, ws_callback=ws_emit,
         resource_counts=resource_counts, seed=req.seed,
-    )
+    ))
+    active_benchmark_tasks.add(task)
+    try:
+        return await task
+    except asyncio.CancelledError:
+        return {"status": "cancelled"}
+    finally:
+        active_benchmark_tasks.discard(task)
 
 
 @app.post("/api/compare")
 async def compare_scenario(req: CompareRequest):
     resource_counts = req.resource_counts or live_session.resource_counts
-    return await run_full_comparison(
+    task = asyncio.create_task(run_full_comparison(
         req.scenario_name, ws_callback=ws_emit,
         resource_counts=resource_counts, seed=req.seed,
-    )
+    ))
+    active_benchmark_tasks.add(task)
+    try:
+        return await task
+    except asyncio.CancelledError:
+        return {"status": "cancelled"}
+    finally:
+        active_benchmark_tasks.discard(task)
 
 
 # ─── Live Session ──────────────────────────────────────────────────────────────
@@ -301,11 +318,15 @@ async def _run_live_batch(run_id: str, batch: list):
 
 @app.post("/api/live/stop")
 async def stop_live_session():
-    if not live_session.run_id:
+    n = live_session.stop() if live_session.run_id else 0
+    n += len(active_benchmark_tasks)
+    for t in list(active_benchmark_tasks):
+        t.cancel()
+    active_benchmark_tasks.clear()
+    if n == 0:
         return {"status": "ok", "stopped": 0}
-    n = live_session.stop()
     await ws_emit({"type": "session_stopped", "run_id": live_session.run_id,
-                   "message": f"⏹ Stopped — {n} in-flight batch(es) cancelled."})
+                   "message": f"⏹ Stopped — {n} in-flight task(s) cancelled."})
     return {"status": "ok", "stopped": n}
 
 
