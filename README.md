@@ -74,7 +74,7 @@ git init
 git add .
 git commit -m "CrisisDesk — multi-agent dispatch simulation"
 git branch -M main
-git remote add origin https://github.com/<your-username>/<your-repo>.git
+git remote add origin (https://github.com/YuzuInori/CrisisDesk.gitu
 git push -u origin main
 ```
 
