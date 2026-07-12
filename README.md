@@ -22,7 +22,7 @@ through that endpoint.
 
 **2. Screenshot of running resources on Alibaba Cloud Workbench:**
 
-![Alibaba Cloud ECS Workbench](docs/alibaba-cloud-screenshot.png)
+![Alibaba Cloud ECS Workbench](frontend/alibaba-cloud-screenshot.png)
 
 *(Take a screenshot of your ECS instance in the Alibaba Cloud console — Workbench
 or the ECS instance list — showing it in the "Running" state with its public IP
