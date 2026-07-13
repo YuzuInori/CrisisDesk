@@ -496,26 +496,29 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-ui,'Inter',sa
 
 /* Declare modal */
 .declare-modal-overlay{
-  position:fixed;inset:0;background:rgba(4,7,14,.65);
+  position:fixed;inset:0;background:rgba(4,7,14,.55);
   display:flex;align-items:center;justify-content:center;z-index:999;
 }
 .declare-modal{
-  background:var(--panel,#0f1626);border:1px solid #2a3550;border-radius:12px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
   width:340px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;
-  box-shadow:0 20px 60px rgba(0,0,0,.5);
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
 }
-.declare-modal-head{padding:14px 16px;border-bottom:1px solid #232d45;font-weight:700;font-size:13px;color:var(--text,#e5e9f0);}
+[data-theme="light"] .declare-modal{background:#ffffff;box-shadow:0 20px 60px rgba(37,99,235,.15);}
+.declare-modal-head{padding:14px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px;color:var(--text);}
 .declare-modal-body{padding:12px 16px;overflow-y:auto;flex:1;}
 .declare-row-item{margin-bottom:10px;}
-.declare-row-item label{display:block;font-size:11px;color:var(--muted,#8b96ad);margin-bottom:4px;font-weight:600;}
+.declare-row-item label{display:block;font-size:11px;color:var(--text-faint);margin-bottom:4px;font-weight:600;}
 .declare-row-item select{
-  width:100%;background:#0d1420;color:#e5e9f0;border:1px solid #2a3550;
+  width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);
   border-radius:6px;padding:7px 8px;font-size:12px;
 }
-.declare-modal-foot{padding:12px 16px;border-top:1px solid #232d45;display:flex;gap:8px;}
+[data-theme="light"] .declare-row-item select{background:#f8faff;}
+.declare-modal-foot{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;}
 .declare-modal-foot button{flex:1;padding:9px;border-radius:8px;border:none;font-weight:700;cursor:pointer;font-size:12.5px;}
-.declare-confirm-btn{background:var(--accent,#3b82f6);color:#fff;}
-.declare-cancel-btn{background:#1b2438;color:#c7d0e0;}
+.declare-confirm-btn{background:var(--info);color:#fff;}
+.declare-cancel-btn{background:var(--surface2);color:var(--text-dim);}
+[data-theme="light"] .declare-cancel-btn{background:#eef1f8;color:#4a5568;}
 </style>
 </head>
 <body>
@@ -720,6 +723,37 @@ function scheduleTimelineRefresh() {
   _timelineRefreshTimer = setTimeout(() => loadTimeline(currentRunId), 400);
 }
 
+// Live-session runs never go through complete_benchmark_run() (that only
+// happens for one-shot /api/run and /api/compare calls), so the "Current Run"
+// stat boxes must be computed here from the incidents/conflicts lists instead
+// of trusting the benchmark_runs row, which stays at its all-zero defaults
+// for the lifetime of a live session.
+let _statsRefreshTimer = null;
+function scheduleLiveStatsRefresh() {
+  if (!currentRunId) return;
+  clearTimeout(_statsRefreshTimer);
+  _statsRefreshTimer = setTimeout(() => refreshLiveStats(currentRunId), 250);
+}
+
+async function refreshLiveStats(runId) {
+  try {
+    const r = await fetch(`${API}/api/runs/${runId}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const incidents = d.incidents || [];
+    const conflicts = d.conflicts || [];
+    const resolved = incidents.filter(i => i.status === 'resolved');
+    const rtimes = resolved.map(i => i.response_time_seconds).filter(v => v != null);
+    const avg = rtimes.length ? rtimes.reduce((a,b)=>a+b,0) / rtimes.length : null;
+    setStats({
+      total_incidents: incidents.length,
+      resolved_incidents: resolved.length,
+      priority_violations: conflicts.length,
+      avg_response_time_seconds: avg,
+    });
+  } catch(e) { console.error('refreshLiveStats', e); }
+}
+
 function onEvent(d) {
   const iid = d.incident_id;
   if (d.type === 'incident_reported' && iid && d.x !== undefined) {
@@ -736,6 +770,7 @@ function onEvent(d) {
     addFeedLine(d);
   } else if (d.type === 'conflict') {
     addConflictLine(d);
+    if (d.run_id === currentRunId) scheduleLiveStatsRefresh();
   } else if (d.type === 'incident_resolved') {
     if (iid) {
       if (!incState[iid]) incState[iid] = {x:d.x||50, y:d.y||50, priority_tier:'CRITICAL', status:'pending'};
@@ -743,14 +778,14 @@ function onEvent(d) {
       drawMap();
     }
     addFeedLine({...d, agent:'system'});
-    if (d.run_id === currentRunId) scheduleTimelineRefresh();
+    if (d.run_id === currentRunId) { scheduleTimelineRefresh(); scheduleLiveStatsRefresh(); }
   } else if (d.type === 'incident_escalated') {
     if (iid) {
       if (!incState[iid]) incState[iid] = {x:d.x||50, y:d.y||50, priority_tier:'CRITICAL', status:'pending'};
       incState[iid].status = 'escalated';
       drawMap();
     }
-    if (d.run_id === currentRunId) scheduleTimelineRefresh();
+    if (d.run_id === currentRunId) { scheduleTimelineRefresh(); scheduleLiveStatsRefresh(); }
   } else if (d.type === 'benchmark_complete') {
     addFeedLine({...d, agent:'system'});
   } else if (d.type === 'incidents_declared') {
@@ -759,10 +794,10 @@ function onEvent(d) {
       addFeedLine({agent:'system', message:`📢 ${(inc.incident_type||'').replace(/_/g,' ')} at (${inc.x}, ${inc.y}) — ${inc.needs}`});
     });
     drawMap();
-    if (d.run_id) { currentRunId = d.run_id; refreshSessPill(); loadRunsList(d.run_id); }
+    if (d.run_id) { currentRunId = d.run_id; refreshSessPill(); loadRunsList(d.run_id); scheduleLiveStatsRefresh(); }
   } else if (d.type === 'batch_complete' || d.type === 'batch_stopped' || d.type === 'batch_error' || d.type === 'session_stopped') {
     addFeedLine({...d, agent:'system'});
-    if (d.run_id && d.run_id === currentRunId) { loadTimeline(currentRunId); syncMapFromAPI(currentRunId); loadRunsList(currentRunId); }
+    if (d.run_id && d.run_id === currentRunId) { loadTimeline(currentRunId); syncMapFromAPI(currentRunId); loadRunsList(currentRunId); scheduleLiveStatsRefresh(); }
     refreshSessPill();
   }
 }
@@ -1318,6 +1353,7 @@ async function declareIncidents(incident_types) {
     const result=await r.json();
     currentRunId=result.run_id;
     await refreshSessPill();
+    scheduleLiveStatsRefresh();
   } catch(e){ console.error(e); }
 }
 
