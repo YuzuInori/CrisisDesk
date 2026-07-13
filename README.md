@@ -33,16 +33,6 @@ A screenshot of running resources from the Alibaba Cloud Workbench:
 
 **Live deployment:** the backend runs on an Alibaba Cloud ECS instance at `http://47.236.246.145:8000` — see [Deployment](#3-deploy-to-alibaba-cloud-ecs) below for the exact setup.
 
-## Quick Submission Checklist
-
-Before hitting "Submit," make sure the project has:
-
-- [x] Public, open-source code repo
-- [x] Code file with the Qwen Cloud Base URL clearly visible
-- [ ] Screenshot showing proof of deployment on Alibaba Cloud
-- [ ] 3-min demo video (not a mockup — real working app)
-- [x] Track identified
-
 ## Project layout
 
 ```
@@ -74,7 +64,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# edit .env and paste your real QWEN_API_KEY (and optionally the per-role keys / QWEN_MAX_CONCURRENCY)
+# edit .env and paste your real QWEN_API_KEYs
 
 python main.py
 ```
