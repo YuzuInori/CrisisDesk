@@ -7,9 +7,6 @@ not agent intelligence). Quality score (0-100) is computed from:
   - Rule compliance (no violations): 40 pts
   - Correct escalation (CRITICAL incidents escalated correctly): 30 pts
   - Resolution rate (incidents resolved vs total): 30 pts
-
-Response time is still shown alongside quality, with an honest label
-explaining what it measures and what it does NOT measure.
 """
 import asyncio
 import json
