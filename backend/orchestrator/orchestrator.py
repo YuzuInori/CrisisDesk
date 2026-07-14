@@ -1,29 +1,6 @@
 """
 CrisisDesk Multi-Agent Orchestrator
 Triage -> Allocator <-> Auditor -> Liaison pipeline with conflict resolution.
-Uses escalate_incident() (not resolve_incident()) for no-resource cases.
-
-Incidents that arrive together are processed as a BATCH, not one strict FIFO
-queue item at a time:
-  - Multi-agent: triages every incident in the batch CONCURRENTLY (parallel
-    Qwen calls), then allocates resources in PRIORITY order (CRITICAL first),
-    so a later-arriving cardiac arrest can still preempt an earlier-arriving
-    minor incident for the last ambulance.
-  - Single-agent baseline: has no such structural reprioritization — it just
-    works through the batch in arrival order, one at a time. This is what
-    makes the "auditor catches a priority violation" story actually happen
-    in the benchmark instead of both pipelines behaving identically.
-
-LOAD DISTRIBUTION: batching incidents concurrently means several Qwen calls
-can be in flight at once, which can trip rate limits on a single API key.
-Two mitigations, both optional / backward compatible:
-  1. Each agent ROLE can use its own API key (QWEN_API_KEY_TRIAGE, _ALLOCATOR,
-     _AUDITOR, _LIAISON, _SINGLE) so concurrent calls from different roles
-     don't compete for the same account's quota. Any role left unset just
-     falls back to the shared QWEN_API_KEY.
-  2. A semaphore (QWEN_MAX_CONCURRENCY, default 4) caps how many Qwen calls
-     are in flight AT ALL at once, plus a short exponential-backoff retry on
-     transient errors (rate limits, timeouts).
 """
 import asyncio
 import os
