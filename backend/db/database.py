@@ -1,7 +1,5 @@
 """
 CrisisDesk Database Layer
-Fixed: escalated_no_resource incidents never get resolved_at set.
-Fixed: resource UNIQUE constraint is per-run, not global.
 """
 import sqlite3
 import json
