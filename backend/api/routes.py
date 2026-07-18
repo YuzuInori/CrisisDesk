@@ -3,7 +3,7 @@ import random
 import uuid
 from pathlib import Path
 from typing import Optional, List
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -189,7 +189,8 @@ async def compare_scenario(req: CompareRequest):
 # ─── Live Session ──────────────────────────────────────────────────────────────
 
 @app.get("/api/live/settings")
-def get_live_settings():
+def get_live_settings(response: Response):
+    response.headers["Cache-Control"] = "no-store"
     open_incidents = 0
     if live_session.run_id:
         all_incidents = get_incidents_by_run(live_session.run_id)
@@ -345,12 +346,14 @@ async def reset_live_session():
 # ─── Run Inspection ───────────────────────────────────────────────────────────
 
 @app.get("/api/runs")
-def list_runs():
+def list_runs(response: Response):
+    response.headers["Cache-Control"] = "no-store"
     return get_all_benchmark_runs()
 
 
 @app.get("/api/runs/{run_id}")
-def get_run(run_id: str):
+def get_run(run_id: str, response: Response):
+    response.headers["Cache-Control"] = "no-store"
     run = get_benchmark_run(run_id)
     if not run:
         raise HTTPException(404, "Run not found")
@@ -364,7 +367,8 @@ def get_run(run_id: str):
 
 
 @app.get("/api/runs/{run_id}/transcript")
-def get_transcript(run_id: str, incident_id: Optional[str] = None):
+def get_transcript(run_id: str, response: Response, incident_id: Optional[str] = None):
+    response.headers["Cache-Control"] = "no-store"
     return get_messages_by_run(run_id, incident_id)
 
 
