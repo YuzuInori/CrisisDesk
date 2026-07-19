@@ -13,7 +13,7 @@ from backend.db.database import (
     get_messages_by_run, get_conflicts_by_run, get_dispatches_by_run,
     get_benchmark_run, get_all_benchmark_runs, compare_runs,
     insert_incident, insert_resource, get_available_resources, create_benchmark_run,
-    delete_run,
+    delete_run, clear_all_runs,
 )
 from backend.orchestrator.benchmark import run_benchmark_scenario, run_full_comparison
 from backend.orchestrator.orchestrator import process_incident_batch_multi_agent
@@ -340,6 +340,30 @@ async def reset_live_session():
         await ws_emit({"type": "session_stopped", "message": f"⏹ Reset — {n} in-flight batch(es) cancelled."})
     await ws_emit({"type": "session_reset", "run_id": old_run_id, "message": "🗑 Live session cleared."})
     return {"status": "ok"}
+
+
+@app.post("/api/runs/clear-all")
+async def clear_all_runs_endpoint():
+    """Wipes ALL run history — the live session's run plus every past 'Run' and
+    'Full Comparison' run — so the Timeline tab (and its All-Runs aggregate view)
+    actually goes empty. /api/live/reset alone can't do this: it only knows about
+    live_session.run_id, while Run/Compare runs are created independently and
+    never registered with live_session."""
+    n = live_session.stop() if live_session.run_id else 0
+    n += len(active_benchmark_tasks)
+    for t in list(active_benchmark_tasks):
+        t.cancel()
+    active_benchmark_tasks.clear()
+
+    live_session.run_id = None
+    live_session.declared_count = 0
+
+    clear_all_runs()
+
+    if n:
+        await ws_emit({"type": "session_stopped", "message": f"⏹ Cleared — {n} in-flight task(s) cancelled."})
+    await ws_emit({"type": "session_reset", "run_id": None, "message": "🗑 All run history cleared."})
+    return {"status": "ok", "stopped": n}
 
 
 # ─── Run Inspection ───────────────────────────────────────────────────────────
