@@ -353,6 +353,22 @@ def delete_run(run_id):
     conn.close()
 
 
+def clear_all_runs():
+    """Wipes every run's data — incidents, resources, agent messages, conflicts,
+    dispatches, and benchmark_runs — regardless of run_id. Used by 'Clear All &
+    Reset' so old Run/Compare history doesn't linger in the Timeline tab after
+    the live session (which only owns its own run_id) is reset."""
+    conn = get_conn()
+    conn.execute("DELETE FROM incidents")
+    conn.execute("DELETE FROM resources")
+    conn.execute("DELETE FROM agent_messages")
+    conn.execute("DELETE FROM conflicts")
+    conn.execute("DELETE FROM dispatches")
+    conn.execute("DELETE FROM benchmark_runs")
+    conn.commit()
+    conn.close()
+
+
 def compare_runs(multi_run_id, single_run_id):
     multi = get_benchmark_run(multi_run_id)
     single = get_benchmark_run(single_run_id)
