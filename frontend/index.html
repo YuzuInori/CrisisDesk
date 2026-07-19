@@ -1365,7 +1365,7 @@ async function stopLiveSession() {
 }
 
 async function resetSession() {
-  await fetch(`${API}/api/live/reset`,{method:'POST'});
+  await fetch(`${API}/api/runs/clear-all`,{method:'POST'});
   currentRunId=null; timelineRunId=null; Object.keys(incState).forEach(k=>delete incState[k]);
   await loadRunsList();
   document.getElementById('feed-body').innerHTML='<div class="empty-state"><span class="icn">📡</span>Waiting for a run.</div>';
